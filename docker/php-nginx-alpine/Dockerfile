@@ -1,32 +1,24 @@
-FROM alpine:3.18
+
+FROM php:8.2-fpm-alpine3.18
 
 LABEL maintainer="repo: wedone/umeditor"
 
+# Install nginx, supervisor and utilities. Use the official php image to avoid
+# needing distribution php packages which may be missing on some architectures.
 RUN apk add --no-cache \
     nginx \
-    php8-fpm \
-    php8-cli \
-    php8-opcache \
-    php8-mbstring \
-    php8-pdo \
-    php8-pdo_mysql \
-    php8-json \
-    php8-xml \
-    php8-gd \
-    php8-curl \
-    php8-session \
-    php8-fileinfo \
     supervisor \
     tzdata \
     ca-certificates \
     curl \
     bash
 
-# Create app directory
+# Set working directory and copy project
 WORKDIR /var/www/html
-
-# Copy project files
 COPY . /var/www/html
+
+# Install common PHP extensions (pdo_mysql, mbstring, xml) if needed
+RUN docker-php-ext-install pdo_mysql mbstring xml || true 
 
 # nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
