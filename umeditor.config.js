@@ -9,10 +9,6 @@
  * 当升级编辑器时，可直接使用旧版配置文件替换新版配置文件,不用担心旧版配置文件中因缺少新功能所需的参数而导致脚本报错。
  **************************提示********************************/
 
-etpl.config({
-    commandOpen: '<%',
-    commandClose: '%>'
-});
 
 (function () {
     /**
@@ -295,7 +291,7 @@ etpl.config({
 			header: ['style', 'class', 'id'],
 			hr:     ['style', 'class', 'id'],
 			i:      ['style', 'class', 'id'],
-//             iframe: ['style', 'class', 'id', 'src', 'frameborder', 'data-latex'],
+            iframe: ['style', 'class', 'id', 'src', 'frameborder', 'data-latex'],
 			img:    ['src', 'alt', 'title', 'width', 'height', 'style', 'class', 'id', '_url'],
 			ins:    ['datetime', 'style', 'class', 'id'],
 			li:     ['style', 'class', 'id'],
