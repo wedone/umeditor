@@ -15,10 +15,18 @@ RUN apk add --no-cache \
 
 # Set working directory and copy project
 WORKDIR /var/www/html
-COPY . /var/www/html
+# Copy the provided PHP-ready UMEditor package into the web root so the image
+# is "out-of-the-box" usable. This copies the folder `umeditor1_2_3-utf8-php`
+# from the repository into the container root.
+COPY umeditor1_2_3-utf8-php/ /var/www/html/
 
-# Install common PHP extensions (pdo_mysql, mbstring, xml) if needed
-RUN docker-php-ext-install pdo_mysql mbstring xml || true 
+# Install common PHP extensions (pdo_mysql, mbstring, xml, gd)
+# Use build dependencies to compile extensions where needed
+RUN apk add --no-cache --virtual .build-deps $PHPIZE_DEPS \
+    libpng-dev libjpeg-turbo-dev libwebp-dev zlib-dev mariadb-dev \
+  && docker-php-ext-configure gd --with-jpeg --with-webp \
+  && docker-php-ext-install -j"$(nproc)" gd pdo_mysql mbstring xml \
+  && apk del .build-deps
 
 # nginx config
 COPY nginx.conf /etc/nginx/nginx.conf
