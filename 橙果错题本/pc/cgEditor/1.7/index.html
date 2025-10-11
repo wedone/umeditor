@@ -1,0 +1,143 @@
+﻿<!DOCTYPE HTML>
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html;charset=utf-8" />
+    <title>橙果编辑器</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <link rel="icon" href="../../../bdf/image/logoTitle.png" type="image/x-icon">
+    <link rel="shortcut icon" href="../../../bdf/image/logoTitle.png" type="image/x-icon">
+
+    <link href="../../../pc/cgEditor/common/themes/default/css/umeditor.min.css" type="text/css"
+        rel="stylesheet">
+    <link href="../../../pc/cgEditor/1.7/css/index.css" type="text/css" rel="stylesheet">
+    <link href="../../../pc/cgEditor/1.7/css/zzsc.css" type="text/css" rel="stylesheet">
+
+    <script type="text/javascript" src="../../../pc/cgEditor/common/third-party/jquery.min.js"></script>
+    <script type="text/javascript" charset="utf-8"
+        src="../../../pc/cgEditor/common/umeditor.config.js"></script>
+    <script type="text/javascript" charset="utf-8"
+        src="../../../pc/cgEditor/common/umeditor.min.js"></script>
+    <script type="text/javascript" src="../../../pc/cgEditor/common/lang/zh-cn/zh-cn.js"></script>
+
+    <link rel="stylesheet" href="../../../pc/cgEditor/common/katex/katex.min.css">
+    <script defer src="../../../pc/cgEditor/common/katex/katex.min.js"></script>
+
+    <script type="text/javascript" src='../../../cuotiben/utils/tool.js'></script>
+
+</head>
+
+<body>
+    <div class="edit-cont">
+        <header>
+            <a href="//www.91chengguo.com" target="_blank">
+                <img src="../../../bdf/image/logo.png" alt="橙果错题本" title="橙果错题本">
+            </a>
+        </header>
+        <div class="show-and-edited-btn">
+            <div class="edited-show-title">
+                编辑
+            </div>
+            <div class="show-and-edited">
+                <div class="original-img-cont">
+                    <div class="cg-card-bordered">
+                        <div class="cg-card-header">
+                            <div class="edit-title">
+                                原图
+                            </div>
+                        </div>
+                        <div class="cg-card-body">
+                            <img id="original-img" src="" alt="">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="edit-text cg-card-bordered">
+                    <div class="cg-card-header">
+                        <div class="edit-title">
+                            文字
+                        </div>
+                        <span class="edit-title-desc">
+                            点击内容可编辑
+                        </span>
+                    </div>
+                    <div class="cg-card-body">
+                        <div class="cg-card-editor">
+                            <div id="my-editor">
+                                题目编辑器
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="submit">
+                <button class="submit-btn" onclick="getContent()">保存编辑</button>
+            </div>
+
+        </div>
+
+    </div>
+    <!-- <div class="seat"> </div> -->
+
+    <div class="modal-bac">
+        <div class="modal">
+            <div class="modal-header">
+                提示
+            </div>
+            <div class="modal-cont">
+                已成功保存编辑内容，可在APP端查看编辑后的题目内容<br />
+            </div>
+            <div class="modal-footer" onclick="sureClick()">
+                <button>确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="tem-save-editor">
+
+    </div>
+    <script type="text/javascript" src="../../../pc/cgEditor/1.7/js/action.js"></script>
+    <script type="text/javascript" src="../../../pc/cgEditor/1.7/js/render.js"></script>
+    <script type="text/javascript" src="../../../pc/cgEditor/1.7/js/canvg.min.js"></script>
+    <script type="text/javascript" src='../../../pc/cgEditor/1.7/js/html2canvas.min.js'></script>
+    <script type="text/javascript" src="../../../pc/cgEditor/1.7/js/mathFormulaToImg.js"></script>
+    <script type="text/javascript" src="../../../pc/cgEditor/1.7/js/notifIt.js"></script>
+</body>
+<script type="text/javascript">
+    //实例化编辑器
+    var um = UM.getEditor('my-editor', {
+        imageUrl: '//www.91chengguo.com/api/ueditor/uploadImg.do?action=uploadimage&loginToken=' + loginToken,/**图片上传执行action**/
+        imagePath: '/upload/',/**图片网络显示路径**/
+        imageFieldName: 'upfile',
+        focus: true,
+        // 去掉 source link unlink | print fullscreen
+        toolbar: [
+            'undo redo | bold italic | superscript subscript strikethrough underline |  removeformat',
+            'selectall',
+            'image',
+            '|preview', 'kityformula', '| formula', 
+        ],
+        // toolbar: [
+        //         'undo redo | superscript subscript | forecolor | removeformat |',
+        //         'insertorderedlist insertunorderedlist | selectall cleardoc',
+        //         'image',
+        //         '| underline horizontal preview', 'kityformula', '| formula',
+        // ],
+        // toolbar: [
+        //    'undo redo | bold italic underline strikethrough | superscript subscript | forecolor | removeformat |',
+        //     'insertorderedlist insertunorderedlist | selectall cleardoc',
+        //     'image',
+        //     '| horizontal preview', 'kityformula', '| formula',
+        // ],
+    });
+    // toolbar: [
+    //        'source | undo redo | bold italic underline strikethrough | superscript subscript | forecolor | removeformat |',
+    //         'insertorderedlist insertunorderedlist | selectall cleardoc',
+    //         'link unlink | image',
+    //         '| horizontal print preview fullscreen', 'kityformula', '| formula',
+    //     ],
+</script>
+
+</html>

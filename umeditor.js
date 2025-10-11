@@ -1,7 +1,7 @@
 /*!
  * UEditor Mini版本
  * version: 1.2.2
- * build: Thu Dec 22 2016 16:33:28 GMT+0800 (CST)
+ * build: Wed Mar 19 2014 17:14:14 GMT+0800 (中国标准时间)
  */
 
 (function($){
@@ -1864,7 +1864,10 @@ var domUtils = dom.domUtils = {
     isBr: function (node) {
         return node.nodeType == 1 && node.tagName == 'BR';
     },
-    
+    isFillChar: function (node, isInStart) {
+        return node.nodeType == 3 && !node.nodeValue.replace(new RegExp((isInStart ? '^' : '' ) + domUtils.fillChar), '').length
+    },
+
     isEmptyBlock: function (node, reg) {
         if (node.nodeType != 1)
             return 0;
@@ -6047,7 +6050,7 @@ UM.plugins['link'] = function(){
 
     this.addOutputRule(function(root){
         $.each(root.getNodesByTagName('a'),function(i,a){
-            var _href = a.getAttr('_href');
+            var _href = utils.html(a.getAttr('_href'));
             if(!/^(ftp|https?|\/|file)/.test(_href)){
                 _href = 'http://' + _href;
             }
@@ -6060,7 +6063,7 @@ UM.plugins['link'] = function(){
     });
     this.addInputRule(function(root){
         $.each(root.getNodesByTagName('a'),function(i,a){
-            a.setAttr('_href', a.getAttr('href'));
+            a.setAttr('_href', utils.html(a.getAttr('href')));
         })
     });
     me.commands['link'] = {
@@ -6068,15 +6071,13 @@ UM.plugins['link'] = function(){
 
             var me = this;
             var rng = me.selection.getRange();
-            opt._href && (opt._href = utils.unhtml(opt._href, /[<">'](?:(amp|lt|quot|gt|#39|nbsp);)?/g));
-            opt.href && (opt.href = utils.unhtml(opt.href, /[<">'](?:(amp|lt|quot|gt|#39|nbsp);)?/g));
             if(rng.collapsed){
                 var start = rng.startContainer;
                 if(start = domUtils.findParentByTagName(start,'a',true)){
                     $(start).attr(opt);
                     rng.selectNode(start).select()
                 }else{
-                    rng.insertNode($('<a>' + opt.href +'</a>').attr(opt)[0]).select()
+                    rng.insertNode($('<a>' +opt.href+'</a>').attr(opt)[0]).select()
 
                 }
 
@@ -7334,7 +7335,6 @@ UM.plugins['video'] = function (){
             var html = [],id = 'tmpVedio';
             for(var i=0,vi,len = videoObjs.length;i<len;i++){
                  vi = videoObjs[i];
-                 vi.url = utils.unhtml(vi.url, /[<">'](?:(amp|lt|quot|gt|#39|nbsp);)?/g);
                  html.push(creatInsertStr( vi.url, vi.width || 420,  vi.height || 280, id + i,vi.align,false));
             }
             me.execCommand("inserthtml",html.join(""),true);
@@ -8171,90 +8171,11 @@ UM.plugins['formula'] = function () {
 
 };
 
-/**
- * @file xssFilter.js
- * @desc xss过滤器
- * @author robbenmu
- */
-
-UM.plugins.xssFilter = function() {
-
-	var config = UMEDITOR_CONFIG;
-	var whiteList = config.whiteList;
-
-	function filter(node) {
-
-		var tagName = node.tagName;
-		var attrs = node.attrs;
-
-		if (!whiteList.hasOwnProperty(tagName)) {
-			node.parentNode.removeChild(node);
-			return false;
-		}
-
-		UM.utils.each(attrs, function (val, key) {
-
-			if (whiteList[tagName].indexOf(key) === -1) {
-				node.setAttr(key);
-			}
-		});
-	}
-
-	// 添加inserthtml\paste等操作用的过滤规则
-	if (whiteList && config.xssFilterRules) {
-		this.options.filterRules = function () {
-
-			var result = {};
-
-			UM.utils.each(whiteList, function(val, key) {
-				result[key] = function (node) {
-					return filter(node);
-				};
-			});
-
-			return result;
-		}();
-	}
-
-	var tagList = [];
-
-	UM.utils.each(whiteList, function (val, key) {
-		tagList.push(key);
-	});
-
-	// 添加input过滤规则
-	//
-	if (whiteList && config.inputXssFilter) {
-		this.addInputRule(function (root) {
-
-			root.traversal(function(node) {
-				if (node.type !== 'element') {
-					return false;
-				}
-				filter(node);
-			});
-		});
-	}
-	// 添加output过滤规则
-	//
-	if (whiteList && config.outputXssFilter) {
-		this.addOutputRule(function (root) {
-
-			root.traversal(function(node) {
-				if (node.type !== 'element') {
-					return false;
-				}
-				filter(node);
-			});
-		});
-	}
-
-};
 (function ($) {
     //对jquery的扩展
     $.parseTmpl = function parse(str, data) {
         var tmpl = 'var __p=[],print=function(){__p.push.apply(__p,arguments);};' + 'with(obj||{}){__p.push(\'' + str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/<%=([\s\S]+?)%>/g,function (match, code) {
-            return "',obj." + code.replace(/\\'/g, "'") + ",'";
+            return "'," + code.replace(/\\'/g, "'") + ",'";
         }).replace(/<%([\s\S]+?)%>/g,function (match, code) {
                 return "');" + code.replace(/\\'/g, "'").replace(/[\r\n\t]/g, ' ') + "__p.push('";
             }).replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/\t/g, '\\t') + "');}return __p.join('');";
