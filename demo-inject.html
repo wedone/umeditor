@@ -1,0 +1,285 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>UMEditor — Demo: GET/AJAX 注入 LaTeX</title>
+    <link href="themes/default/css/umeditor.css" type="text/css" rel="stylesheet">
+    <script type="text/javascript" src="third-party/jquery.min.js"></script>
+    <script type="text/javascript" src="umeditor.config.js"></script>
+    <script type="text/javascript" src="umeditor.min.js"></script>
+    <script type="text/javascript" src="lang/zh-cn/zh-cn.js"></script>
+    <style>
+        body{ font-family: Arial, Helvetica, sans-serif; padding: 16px }
+        .notice{ margin-bottom:12px; color:#333 }
+        /* reduce spacing for injected display formulas */
+        .math-display { display:block; margin:0.2em 0; }
+    </style>
+</head>
+<body>
+    <h2>UMEditor — GET / AJAX 注入示例</h2>
+    <p class="notice">说明：可通过 URL 参数 <code>?latex=...</code> 或 AJAX 从后端拉取 LaTeX，然后把公式插入编辑器并由 MathQuill 渲染。</p>
+
+    <!-- 编辑器占位 -->
+    <script id="myEditor" type="text/plain" style="width:1000px;height:240px;">这里可以写一些输入提示</script>
+
+    <div style="margin-top:12px">
+        <button id="btn-insert-sample">插入示例 LaTeX</button>
+        <button id="btn-fetch-latex">从后端 AJAX 获取并插入</button>
+        <span style="margin-left:16px">测试 GET 注入示例： <a href="demo-inject.html?latex=%5Cfrac%7Ba%7D%7Bb%7D">插入 \frac{a}{b}</a></span>
+    </div>
+
+    <div style="margin-top:12px">
+        <label style="display:block;margin-bottom:6px;">混合文本 + LaTeX（支持内联 $...$, \(...\) 与显示 $$...$$, \[...\]）：</label>
+        <textarea id="mixed-input" style="width:100%;height:100px;">这是普通文本，下面是内联公式 $\frac{a}{b}$，然后是显示公式：$$\int_0^1 x^2 dx$$，结束。</textarea>
+        <div style="margin-top:6px;text-align:right"><button id="btn-inject-mixed">插入混合内容到编辑器</button></div>
+    </div>
+
+    <div style="margin-top:12px">
+        <label style="display:block;margin-bottom:6px;">插入 Base64 图片（输入 data URL 或仅 base64）：</label>
+        <textarea id="base64-input" style="width:100%;height:80px;">data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA
+AAAAFCAIAAAACDbGyAAAAE0lEQVR42mP8z/CfPQMDAwMABBgB9xw3xQAAAABJRU5ErkJggg==</textarea>
+        <div style="margin-top:6px;text-align:right">
+            <button id="btn-insert-base64">插入 Base64 图片到编辑器</button>
+        </div>
+    </div>
+
+    <script>
+        // 从 URL 获取参数
+        function getQueryParam(name){
+            var re = new RegExp('[?&]'+name+'=([^&]*)');
+            var m = location.search.match(re);
+            return m ? decodeURIComponent(m[1]) : null;
+        }
+
+        // 简单的 HTML attribute/attr 转义（用于 data-latex）
+        function escapeAttr(s){
+            return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+        }
+
+        // 预处理 LaTeX，做常见替换以兼容 MathQuill
+        function normalizeLatexForMathQuill(latex){
+            if(!latex) return latex;
+            var s = String(latex);
+            // 1) 将 \{...\}（用户写的转义大括号）转换为 \left\{ ... \right\}
+            s = s.replace(/\\\{\s*([^{}]+?)\s*\\\}/g, function(_, inner){ return '\\left\\{' + inner + '\\right\\}'; });
+            // 2) 保护已经存在的 \left\{ and \right\}，避免后续将其中的 "\\{" 替换为 "\\lbrace"
+            s = s.replace(/\\left\\\{/g, '<<LEFTLBRACE>>').replace(/\\right\\\}/g, '<<RIGHTRBRACE>>');
+            // 3) 把竖线替换为 \mid（全局替换通常是安全的，已在 Math 表达式中更明确）
+            s = s.replace(/\|/g, '\\mid');
+            // 4) 替换孤立的 \\{ and \\} 为 \\lbrace / \\rbrace（不会影响已被保护的 \left/\right）
+            s = s.replace(/\\\{/g, '\\lbrace').replace(/\\\}/g, '\\rbrace');
+            // 5) 恢复先前保护的 \left\{ and \right\}
+            s = s.replace(/<<LEFTLBRACE>>/g, '\\left\\{').replace(/<<RIGHTRBRACE>>/g, '\\right\\}');
+            // 6) 将多个空格压缩为单个空格
+            s = s.replace(/\s{2,}/g, ' ');
+            // 7) MathQuill 对 \mathbb 支持有限，降级为 \mathrm 以保证渲染（例如 \mathbb{Z} -> \mathrm{Z}）
+            s = s.replace(/\\mathbb\{([^}]+?)\}/g, function(_, inner){ return '\\mathrm{' + inner + '}'; });
+            // 8) 处理 mhchem 的 \ce{...}：支持嵌套大括号的解析，保留内部内容并用大括号包裹以保留分组
+            s = (function(str){
+                var out = '';
+                var i = 0;
+                while (i < str.length) {
+                    var p = str.indexOf('\\ce{', i);
+                    if (p === -1) { out += str.slice(i); break; }
+                    out += str.slice(i, p);
+                    var j = p + 4; // position after '\ce{'
+                    var depth = 1;
+                    while (j < str.length && depth > 0) {
+                        if (str[j] === '{') depth++;
+                        else if (str[j] === '}') depth--;
+                        j++;
+                    }
+                    // j is position after matching '}' or end
+                    var inner = str.slice(p + 4, Math.max(p + 4, j - 1));
+                    out += '{' + inner + '}';
+                    i = j;
+                }
+                return out;
+            })(s);
+            // 9) 将 \xlongequal{...}（长等号，来自 amsmath/mhchem 用法）替换为普通等号 '='
+            s = s.replace(/\\xlongequal\{[^}]*\}/g, '=');
+            return s;
+        }
+
+        // 注入混合文本 + LaTeX（支持 $$...$$ 和 $...$）
+    // 改为一次构建 HTML（使用 span.mathquill-embedded-latex 保存 LaTeX 原文）并单次插入，
+        // 以避免多次 execCommand 导致的 selection/顺序问题。
+        function injectMixedContentToUM(editor, mixedText) {
+            if (!editor || !editor.execCommand) {
+                console.error('editor not found or invalid');
+                return;
+            }
+
+            function escapeHtml(s) {
+                return String(s)
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            // 将文本转换为 HTML，保留换行：单个换行 -> <br>，连续空行 -> <br><br>
+            function textToHtml(s) {
+                if (!s) return '';
+                s = String(s).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+                // 先对文本做 HTML 转义
+                var esc = escapeHtml(s);
+                // 将连续两个或更多换行替换为两个 <br>
+                esc = esc.replace(/\n{2,}/g, '<br><br>');
+                // 将剩余的单个换行替换为 <br>
+                esc = esc.replace(/\n/g, '<br>');
+                return esc;
+            }
+
+            // 支持分隔符：$$...$$ (display), \[...\] (display), \(...\) (inline), $...$ (inline)
+            var re = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)/g;
+            var lastIndex = 0;
+            var m;
+            var parts = [];
+
+            while ((m = re.exec(mixedText)) !== null) {
+                var idx = m.index;
+                if (idx > lastIndex) {
+                    var textSegment = mixedText.slice(lastIndex, idx);
+                    if (textSegment) parts.push(textToHtml(textSegment));
+                }
+
+                var token = m[0];
+                var latex = token;
+                var isDisplay = false;
+                if (token.startsWith('$$') && token.endsWith('$$')) {
+                    latex = token.slice(2, -2);
+                    isDisplay = true;
+                } else if (token.startsWith('\\[') && token.endsWith('\\]')) {
+                    latex = token.slice(2, -2);
+                    isDisplay = true;
+                } else if (token.startsWith('\\(') && token.endsWith('\\)')) {
+                    latex = token.slice(2, -2);
+                    isDisplay = false;
+                } else if (token.startsWith('$') && token.endsWith('$')) {
+                    latex = token.slice(1, -1);
+                    isDisplay = false;
+                }
+                latex = latex.trim();
+
+                // 预处理 LaTeX 以提高 MathQuill 的解析兼容性
+                var normalized = normalizeLatexForMathQuill(latex);
+
+                // 使用 span.mathquill-embedded-latex 存放 LaTeX 原文，编辑器的 input rule 会把它转成 iframe/data-latex
+                var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
+                if (isDisplay) {
+                    // 用轻量的 block 容器包裹显示公式，减少额外间距
+                    parts.push('<div class="math-display">' + span + '</div>');
+                } else {
+                    parts.push(span);
+                }
+
+                lastIndex = re.lastIndex;
+            }
+
+                if (lastIndex < mixedText.length) {
+                var tail = mixedText.slice(lastIndex);
+                if (tail) parts.push(textToHtml(tail));
+            }
+
+            // 一次性插入构建好的 HTML，保持顺序
+            var html = parts.join('');
+            try {
+                editor.execCommand('inserthtml', html);
+            } catch (e) {
+                console.error('inserthtml failed, falling back to stepwise insertion', e);
+                // 退回到原来的逐步插入方式（保留兼容性）
+                var lastIdx = 0;
+                re.lastIndex = 0;
+                while ((m = re.exec(mixedText)) !== null) {
+                    var idx2 = m.index;
+                    if (idx2 > lastIdx) {
+                        var textSegment2 = mixedText.slice(lastIdx, idx2);
+                        if (textSegment2) editor.execCommand('inserthtml', escapeHtml(textSegment2));
+                    }
+                    var token2 = m[0];
+                    var latex2 = token2;
+                    var display2 = token2.startsWith('$$') && token2.endsWith('$$');
+                    if (display2) latex2 = token2.slice(2, -2).trim(); else latex2 = token2.slice(1, -1).trim();
+                    if (display2) { editor.execCommand('inserthtml','<p></p>'); editor.execCommand('formula', latex2); editor.execCommand('inserthtml','<p></p>'); }
+                    else { editor.execCommand('formula', latex2); }
+                    lastIdx = re.lastIndex;
+                }
+                if (lastIdx < mixedText.length) { var tail2 = mixedText.slice(lastIdx); if (tail2) editor.execCommand('inserthtml', escapeHtml(tail2)); }
+                if (lastIdx < mixedText.length) { var tail2 = mixedText.slice(lastIdx); if (tail2) editor.execCommand('inserthtml', escapeHtml(tail2), true); }
+            }
+        }
+
+        UM.getEditor('myEditor').ready(function(){
+            var ed = UM.getEditor('myEditor');
+
+            // 1) GET 注入
+            var latex = getQueryParam('latex');
+            var html = getQueryParam('content');
+            if (html) {
+                try{ ed.setContent(html); console.log('setContent from URL'); }catch(e){console.error(e)}
+            }
+            if (latex) {
+                try{ var norm = normalizeLatexForMathQuill(latex); ed.execCommand('formula', norm); console.log('execCommand formula from URL', norm); }catch(e){console.error(e)}
+            }
+
+            // 2) 按钮：插入示例 LaTeX
+            document.getElementById('btn-insert-sample').addEventListener('click', function(){
+                var sample = '\\frac{a}{b}';
+                ed.execCommand('formula', normalizeLatexForMathQuill(sample));
+            });
+
+            // 按钮：插入混合内容到编辑器
+            document.getElementById('btn-inject-mixed').addEventListener('click', function(){
+                var mixed = document.getElementById('mixed-input').value || '';
+                if (mixed) {
+                    injectMixedContentToUM(ed, mixed);
+                }
+            });
+
+            // 插入 Base64 图片
+            document.getElementById('btn-insert-base64').addEventListener('click', function(){
+                var s = document.getElementById('base64-input').value || '';
+                if (!s) return;
+                // 如果只是 base64 数据（不含 data: 前缀），默认使用 png
+                if (!/^data:/i.test(s)) s = 'data:image/png;base64,' + s.trim();
+                try { ed.execCommand('inserthtml', '<img src="' + escapeAttr(s) + '" alt="image" />'); }
+                catch(e) { console.error('insert base64 failed', e); }
+            });
+
+            // 3) 按钮：通过 AJAX 从后端拉取 latex（JSON）并插入
+            document.getElementById('btn-fetch-latex').addEventListener('click', function(){
+                // 尝试后端 PHP 接口；若不可用则回退到静态 JSON（便于静态服务器测试）
+                function handleJsonResponse(r){
+                    return r.json().then(function(j){
+                        if (j.latex) {
+                            var normj = normalizeLatexForMathQuill(j.latex);
+                            ed.execCommand('formula', normj);
+                            console.log('inserted latex from AJAX:', normj);
+                        } else if (j.html) {
+                            ed.setContent(j.html);
+                        } else {
+                            console.warn('no latex/html in response', j);
+                        }
+                    });
+                }
+
+                fetch('php/get-latex.php', { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: 'id=1' })
+                    .then(function(r){
+                        if (r.ok) {
+                            return handleJsonResponse(r);
+                        }
+                        // 如果 PHP 接口返回非 2xx（例如静态服务器会返回 404），回退到静态 json 文件
+                        console.warn('php/get-latex.php not available (status ' + r.status + '), falling back to php/get-latex.json');
+                        return fetch('php/get-latex.json').then(handleJsonResponse);
+                    })
+                    .catch(function(err){
+                        console.warn('fetch php failed, fallback to static JSON', err);
+                        fetch('php/get-latex.json').then(handleJsonResponse).catch(function(e){ console.error('fallback also failed', e); });
+                    });
+            });
+        });
+    </script>
+</body>
+</html>
