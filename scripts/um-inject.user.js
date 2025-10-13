@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
-// @name         UMEditor Quick Injector
+// @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.14.00002
+// @version      2025.10.14.00003
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  http://127.0.0.1:8000/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -13,6 +13,16 @@
 
 (function(){
     'use strict';
+
+    // 主题颜色配置（基于 橙果 色 #ff6000）
+    var THEME = {
+        // 选用比 emoji 略深且更稳重的橙色以便区分，同时保留亮色用于渐变/高光
+        primary: '#d35400',    // 深橙，便于在 UI 元素上与 emoji 区分
+        primaryLight: '#ff7a20',
+        // shadow / focus 使用与 primary 近似的 rgba
+        shadow: 'rgba(211,84,0,0.22)',
+        focus: 'rgba(211,84,0,0.14)'
+    };
 
     // 更鲁棒地检测编辑器 id：在实际目标站点上会有多种占位形式
     // - 先收集几类常见占位元素（script[type="text/plain"], textarea, div, contenteditable 等）
@@ -111,10 +121,10 @@
         if (handle) {
             try {
                 var hr = handle.getBoundingClientRect();
-                // 计算 right 为视口右边到 handle 右边的距离，再加一个小间距
-                var rightPx = Math.max(12, (window.innerWidth - hr.right) + 8);
-                // 计算 bottom 为视口底部到 handle.top 的距离，再加一些间距使面板悬于其上方
-                var bottomPx = Math.max(12, (window.innerHeight - hr.top) + 12);
+                // 让面板的右侧与悬浮标的右侧精确对齐（去掉额外偏移）
+                var rightPx = Math.max(8, Math.round(window.innerWidth - hr.right));
+                // 计算面板底部：基于 handle.top 的位置并稍微增加垂直间距，使整体更靠下
+                var bottomPx = Math.max(12, Math.round((window.innerHeight - hr.top) + 10));
                 panel.style.right = rightPx + 'px';
                 panel.style.bottom = bottomPx + 'px';
             } catch (e) {
@@ -137,9 +147,9 @@
         
         // 改为包含混合输入与按钮（带头部样式）
         panel.innerHTML = '\
-            <div id="um-inject-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:linear-gradient(90deg,#1e88e5,#1976d2);color:#fff;">\
+            <div id="um-inject-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:linear-gradient(90deg,#ff7a20,#ff6000);color:#fff;">\
                 <div style="display:flex;align-items:center;gap:10px">\
-                    <div style="width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">UM</div>\
+                    <div id="um-inject-badge" style="width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">🍊</div>\
                     <strong style="font-size:14px;letter-spacing:0.2px">橙果错题助手</strong>\
                 </div>\
                 <button id="um-inject-close" aria-label="关闭面板" style="background:transparent;border:none;color:rgba(255,255,255,0.9);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:6px">✕</button>\
@@ -164,7 +174,7 @@
                     </div>\
                     <div style="display:flex;gap:8px">\
                         <button id="um-insert-content" aria-label="插入文本" style="background:linear-gradient(180deg,#f3f4f6,#eef1f6);border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:6px;cursor:pointer">插入文本</button>\
-                        <button id="um-insert-mixed" aria-label="插入混合内容" style="background:linear-gradient(180deg,#1e88e5,#1976d2);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">插入混合内容</button>\
+                        <button id="um-insert-mixed" aria-label="插入混合内容" style="background:linear-gradient(180deg,#ff7a20,#ff6000);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">插入混合内容</button>\
                     </div>\
                 </div>\
             </div>';
@@ -188,9 +198,9 @@
                 var el = document.getElementById(id);
                 if(!el) return;
                 el.style.transition = 'all 120ms ease';
-                el.addEventListener('mouseenter', function(){ el.style.transform = 'translateY(-1px)'; el.style.boxShadow = '0 6px 12px rgba(15,40,80,0.06)'; });
+                el.addEventListener('mouseenter', function(){ el.style.transform = 'translateY(-1px)'; el.style.boxShadow = '0 6px 12px rgba(0,0,0,0.06)'; });
                 el.addEventListener('mouseleave', function(){ el.style.transform = ''; el.style.boxShadow = ''; });
-                el.addEventListener('focus', function(){ el.style.outline = '2px solid rgba(30,136,229,0.16)'; });
+                el.addEventListener('focus', function(){ el.style.outline = '2px solid '+THEME.focus; });
                 el.addEventListener('blur', function(){ el.style.outline = ''; });
             });
         })();
@@ -259,8 +269,8 @@
         if(!panel || !handle) return;
         try{
             var hr = handle.getBoundingClientRect();
-            var rightPx = Math.max(12, (window.innerWidth - hr.right) + 8);
-            var bottomPx = Math.max(12, (window.innerHeight - hr.top) + 12);
+            var rightPx = Math.max(8, Math.round(window.innerWidth - hr.right));
+            var bottomPx = Math.max(12, Math.round((window.innerHeight - hr.top) + 24));
             panel.style.right = rightPx + 'px';
             panel.style.bottom = bottomPx + 'px';
         }catch(e){/* ignore */}
@@ -397,27 +407,28 @@
         h.id = 'um-inject-handle';
         h.style.position = 'fixed';
         h.style.right = '20px';
-        h.style.bottom = '90px';
+    // 整体向下移动悬浮标位置
+    h.style.bottom = '20px';
         // 更漂亮的样式：圆形按钮，悬停时展开显示完整域名
         h.style.width = '44px';
         h.style.height = '44px';
     h.style.borderRadius = '8px';
-        h.style.background = 'linear-gradient(135deg,#1e88e5,#1976d2)';
-        h.style.color = '#fff';
+    h.style.background = 'linear-gradient(135deg,#ff7a20,#ff6000)';
+    h.style.color = '#fff';
         h.style.display = 'flex';
         h.style.alignItems = 'center';
         h.style.justifyContent = 'center';
-        h.style.boxShadow = '0 6px 20px rgba(25,118,210,0.24)';
+    h.style.boxShadow = '0 6px 20px rgba(255,96,0,0.22)';
         h.style.cursor = 'pointer';
         h.style.zIndex = 1000000;
         h.style.fontWeight = '700';
         h.style.fontSize = '13px';
         h.style.transition = 'width 180ms ease, padding 180ms ease, border-radius 180ms ease';
-        h.title = 'UM Injector - 点击展开/收起面板';
+        h.title = '橙果错题助手 - 点击展开/收起面板';
         // host 用于悬停时显示
         var fullHost = window.location.hostname || 'site';
-        // 默认显示简短标识 "UM"
-        h.textContent = 'UM';
+    // 默认显示简短标识 emoji
+    h.textContent = '🍊';
         // 点击切换面板
         h.addEventListener('click', function(){
             if(!document.getElementById('um-inject-panel')) createPanel();
@@ -425,20 +436,23 @@
             if(!p) return;
             p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
         });
+        // active visual: 按下时微缩并减弱阴影
+        h.addEventListener('mousedown', function(){ h.style.transform = 'scale(0.96)'; h.style.boxShadow = '0 4px 14px '+THEME.shadow; });
+        document.addEventListener('mouseup', function(){ h.style.transform = ''; h.style.boxShadow = '0 6px 20px '+THEME.shadow; });
         // 悬停展开显示完整域名
         h.addEventListener('mouseenter', function(){
             h.style.width = '170px';
             h.style.borderRadius = '8px';
             h.style.padding = '0 12px';
             h.style.justifyContent = 'flex-start';
-            h.textContent = 'UM Injector — ' + fullHost.replace(/^www\./,'');
+            h.textContent = '橙果错题助手 — ' + fullHost.replace(/^www\./,'');
         });
         h.addEventListener('mouseleave', function(){
             h.style.width = '44px';
             h.style.borderRadius = '8px';
             h.style.padding = '';
             h.style.justifyContent = 'center';
-            h.textContent = 'UM';
+            h.textContent = '🍊';
         });
         document.body.appendChild(h);
     }
