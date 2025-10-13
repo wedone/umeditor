@@ -11,6 +11,9 @@
 // @grant        none
 // ==/UserScript==
 
+/* eslint-env browser */
+/* global UM */
+
 (function(){
     'use strict';
 
