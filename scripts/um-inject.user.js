@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         UMEditor Quick Injector
 // @namespace    http://example.com/
-// @version      2025.10.14.000005
+// @version      2025.10.14.00002
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  http://127.0.0.1:8000/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -88,44 +88,75 @@
             panel.style.right = '20px';
             panel.style.bottom = '20px';
         }
-        panel.style.width = '360px';
-        panel.style.zIndex = 999999;
-        panel.style.background = 'rgba(255,255,255,0.98)';
-        panel.style.border = '1px solid #ccc';
-        panel.style.padding = '8px';
-        panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.12)';
-        panel.style.fontFamily = 'Arial, sans-serif';
+    panel.style.width = '480px';
+    panel.style.zIndex = 999999;
+    panel.style.background = 'rgba(255,255,255,0.98)';
+    panel.style.border = '1px solid rgba(0,0,0,0.08)';
+    panel.style.padding = '0';
+    panel.style.boxShadow = '0 10px 30px rgba(12,30,80,0.12)';
+    panel.style.fontFamily = 'Helvetica, Arial, sans-serif';
+    panel.style.borderRadius = '10px';
+    panel.style.overflow = 'hidden';
         
-        // 改为包含混合输入与按钮
+        // 改为包含混合输入与按钮（带头部样式）
         panel.innerHTML = '\
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">\
-                <strong style="font-size:13px">UM Injector</strong>\
-                <button id="um-inject-close" style="font-size:12px">关闭</button>\
-            </div>\
-            <div style="margin-bottom:6px">\
-                <label style="font-size:12px">预览（HTML 可用）</label>\
-                <textarea id="um-inject-content" style="width:100%;height:58px"></textarea>\
-            </div>\
-            <div style="margin-bottom:6px">\
-                <label style="font-size:12px">混合文本+LaTeX（支持 $...$, $$...$$, \\\\(...\\\\) 与 \\\\[...\\\\]）</label>\
-                <textarea id="um-inject-mixed" style="width:100%;height:80px"></textarea>\
-            </div>\
-            <div style="display:flex;align-items:center;justify-content:space-between">\
-                <div style="display:flex;align-items:center">\
-                    <button id="um-clear-editor" style="background:#ff4d4f;color:#fff;border:none;padding:6px 8px;border-radius:4px">清空编辑器</button>\
-                    <span id="um-clear-confirm" style="display:none;margin-left:8px;padding:6px;border-radius:6px;background:#fff;border:1px solid #eee;box-shadow:0 6px 12px rgba(0,0,0,0.08);font-size:12px;align-items:center;">\
-                        <span style="margin-right:8px;color:#333">确定清空？</span>\
-                        <button id="um-clear-confirm-yes" style="background:#ff4d4f;color:#fff;border:none;padding:4px 8px;border-radius:4px;margin-right:6px;">确认</button>\
-                        <button id="um-clear-confirm-no" style="padding:4px 8px;border-radius:4px;border:1px solid #ccc;background:#fff;">取消</button>\
-                    </span>\
+            <div id="um-inject-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:linear-gradient(90deg,#1e88e5,#1976d2);color:#fff;">\
+                <div style="display:flex;align-items:center;gap:10px">\
+                    <div style="width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">UM</div>\
+                    <strong style="font-size:14px;letter-spacing:0.2px">橙果错题助手</strong>\
                 </div>\
-                <div style="display:flex;gap:6px">\
-                    <button id="um-insert-content">插入文本</button>\
-                    <button id="um-insert-mixed">插入混合内容</button>\
+                <button id="um-inject-close" aria-label="关闭面板" style="background:transparent;border:none;color:rgba(255,255,255,0.9);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:6px">✕</button>\
+            </div>\
+            <div style="padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,250,252,0.98));">\
+                <div>\
+                    <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">预览（HTML 可用）</label>\
+                    <textarea id="um-inject-content" style="width:100%;height:62px;border:1px solid rgba(0,0,0,0.06);padding:8px;border-radius:6px;resize:vertical;font-family:inherit;font-size:13px"></textarea>\
+                </div>\
+                <div>\
+                    <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">混合文本+LaTeX（支持 $...$ / $$...$$ / \\(...\\) / \\[...\\]）</label>\
+                    <textarea id="um-inject-mixed" style="width:100%;height:110px;border:1px solid rgba(0,0,0,0.06);padding:8px;border-radius:6px;resize:vertical;font-family:Menlo,Consolas,monospace;font-size:13px"></textarea>\
+                </div>\
+                <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px">\
+                    <div style="display:flex;align-items:center">\
+                        <button id="um-clear-editor" aria-label="清空编辑器" style="background:#ff4d4f;color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">清空编辑器</button>\
+                        <span id="um-clear-confirm" style="display:none;opacity:0;margin-left:8px;padding:6px;border-radius:6px;background:#fff;border:1px solid #eee;box-shadow:0 6px 12px rgba(0,0,0,0.06);font-size:12px;align-items:center;transition:opacity 180ms ease;">\
+                            <span style="margin-right:8px;color:#333">确定清空？</span>\
+                            <button id="um-clear-confirm-yes" aria-label="确认清空" style="background:#ff4d4f;color:#fff;border:none;padding:6px 10px;border-radius:6px;margin-right:6px;cursor:pointer">确认</button>\
+                            <button id="um-clear-confirm-no" aria-label="取消清空" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer">取消</button>\
+                        </span>\
+                    </div>\
+                    <div style="display:flex;gap:8px">\
+                        <button id="um-insert-content" aria-label="插入文本" style="background:linear-gradient(180deg,#f3f4f6,#eef1f6);border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:6px;cursor:pointer">插入文本</button>\
+                        <button id="um-insert-mixed" aria-label="插入混合内容" style="background:linear-gradient(180deg,#1e88e5,#1976d2);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">插入混合内容</button>\
+                    </div>\
                 </div>\
             </div>';
 
         document.body.appendChild(panel);
+
+        // 强制面板内元素使用 border-box，避免 width:100% + padding 导致溢出
+        (function(){
+            try{
+                var style = document.createElement('style');
+                style.type = 'text/css';
+                style.appendChild(document.createTextNode('\n#um-inject-panel, #um-inject-panel * { box-sizing: border-box; }\n#um-inject-panel textarea { max-width: 100%; width: 100%; }\n#um-inject-panel button { min-width: 0; }\n'));
+                document.head.appendChild(style);
+            }catch(e){/* ignore */}
+        })();
+
+        // 简单美化交互：按钮 hover 动画和 focus 样式（通过 JS 绑定以避免复杂样式注入）
+        (function(){
+            var ids = ['um-inject-close','um-clear-editor','um-clear-confirm-yes','um-clear-confirm-no','um-insert-content','um-insert-mixed'];
+            ids.forEach(function(id){
+                var el = document.getElementById(id);
+                if(!el) return;
+                el.style.transition = 'all 120ms ease';
+                el.addEventListener('mouseenter', function(){ el.style.transform = 'translateY(-1px)'; el.style.boxShadow = '0 6px 12px rgba(15,40,80,0.06)'; });
+                el.addEventListener('mouseleave', function(){ el.style.transform = ''; el.style.boxShadow = ''; });
+                el.addEventListener('focus', function(){ el.style.outline = '2px solid rgba(30,136,229,0.16)'; });
+                el.addEventListener('blur', function(){ el.style.outline = ''; });
+            });
+        })();
 
         document.getElementById('um-inject-close').addEventListener('click', function(){ panel.style.display = 'none'; });
 
@@ -151,8 +182,11 @@
             var no = document.getElementById('um-clear-confirm-no');
             var hideTimer = null;
             function restoreButton(){ try{ if(btn) btn.style.display = ''; }catch(e){} }
-            function hideBox(){ if(!box) return; box.style.display = 'none'; if(hideTimer){ clearTimeout(hideTimer); hideTimer = null; } restoreButton(); }
-            function showBox(){ if(!box) return; if(btn) btn.style.display = 'none'; box.style.display = 'inline-flex'; box.style.alignItems = 'center'; if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(hideBox, 6000); }
+            function hideBox(){ if(!box) return; box.style.opacity = '0'; if(hideTimer){ clearTimeout(hideTimer); hideTimer = null; } // wait for transition end to set display none
+                var onEnd = function(){ try{ box.style.display = 'none'; box.removeEventListener('transitionend', onEnd); }catch(e){} }; box.addEventListener('transitionend', onEnd);
+                restoreButton(); }
+            function showBox(){ if(!box) return; if(btn) btn.style.display = 'none'; box.style.display = 'inline-flex'; box.style.alignItems = 'center'; // ensure the browser registers the display change before opacity
+                requestAnimationFrame(function(){ box.style.opacity = '1'; }); if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(hideBox, 6000); }
             if(!btn || !box || !yes || !no) return;
             btn.addEventListener('click', function(e){
                 e.stopPropagation();
