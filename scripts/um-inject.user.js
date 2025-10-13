@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         UMEditor Quick Injector
 // @namespace    http://example.com/
-// @version      2025.10.14.000000
+// @version      2025.10.14.000005
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  http://127.0.0.1:8000/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -110,10 +110,19 @@
                 <label style="font-size:12px">混合文本+LaTeX（支持 $...$, $$...$$, \\\\(...\\\\) 与 \\\\[...\\\\]）</label>\
                 <textarea id="um-inject-mixed" style="width:100%;height:80px"></textarea>\
             </div>\
-            <div style="display:flex;gap:6px;justify-content:flex-end">\
-                <button id="um-insert-content">插入文本</button>\
-                <button id="um-insert-both">插入文本</button>\
-                <button id="um-insert-mixed">插入混合内容</button>\
+            <div style="display:flex;align-items:center;justify-content:space-between">\
+                <div style="display:flex;align-items:center">\
+                    <button id="um-clear-editor" style="background:#ff4d4f;color:#fff;border:none;padding:6px 8px;border-radius:4px">清空编辑器</button>\
+                    <span id="um-clear-confirm" style="display:none;margin-left:8px;padding:6px;border-radius:6px;background:#fff;border:1px solid #eee;box-shadow:0 6px 12px rgba(0,0,0,0.08);font-size:12px;align-items:center;">\
+                        <span style="margin-right:8px;color:#333">确定清空？</span>\
+                        <button id="um-clear-confirm-yes" style="background:#ff4d4f;color:#fff;border:none;padding:4px 8px;border-radius:4px;margin-right:6px;">确认</button>\
+                        <button id="um-clear-confirm-no" style="padding:4px 8px;border-radius:4px;border:1px solid #ccc;background:#fff;">取消</button>\
+                    </span>\
+                </div>\
+                <div style="display:flex;gap:6px">\
+                    <button id="um-insert-content">插入文本</button>\
+                    <button id="um-insert-mixed">插入混合内容</button>\
+                </div>\
             </div>';
 
         document.body.appendChild(panel);
@@ -124,11 +133,7 @@
             var c = document.getElementById('um-inject-content').value || '';
             insertContent(c);
         });
-        document.getElementById('um-insert-both').addEventListener('click', function(){
-            var c = document.getElementById('um-inject-content').value || '';
-            // 原来的 "插入二者" 改为仅插入文本内容以简化界面
-            if(c) insertContent(c);
-        });
+        // 已移除重复按钮：只保留插入文本与插入混合内容两项
         document.getElementById('um-insert-mixed').addEventListener('click', function(){
             var mixed = document.getElementById('um-inject-mixed').value || '';
             if(!mixed) return alert('混合内容为空');
@@ -137,6 +142,43 @@
             if(!ed) return alert('找不到编辑器实例');
             injectMixedContentToUM(ed, mixed);
         });
+
+        // 内联确认：在清空按钮旁显示确认框（包含“确认 / 取消”），并在若干秒后自动隐藏
+        (function(){
+            var btn = document.getElementById('um-clear-editor');
+            var box = document.getElementById('um-clear-confirm');
+            var yes = document.getElementById('um-clear-confirm-yes');
+            var no = document.getElementById('um-clear-confirm-no');
+            var hideTimer = null;
+            function restoreButton(){ try{ if(btn) btn.style.display = ''; }catch(e){} }
+            function hideBox(){ if(!box) return; box.style.display = 'none'; if(hideTimer){ clearTimeout(hideTimer); hideTimer = null; } restoreButton(); }
+            function showBox(){ if(!box) return; if(btn) btn.style.display = 'none'; box.style.display = 'inline-flex'; box.style.alignItems = 'center'; if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(hideBox, 6000); }
+            if(!btn || !box || !yes || !no) return;
+            btn.addEventListener('click', function(e){
+                e.stopPropagation();
+                if(box.style.display === 'inline-flex') hideBox(); else showBox();
+            });
+            no.addEventListener('click', function(e){ e.stopPropagation(); hideBox(); });
+            yes.addEventListener('click', function(e){
+                e.stopPropagation(); hideBox();
+                try{
+                    var id = detectEditorId();
+                    var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
+                    if(!inst || !inst.ed) return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
+                    var ed = inst.ed;
+                    if(typeof ed.setContent === 'function'){
+                        ed.setContent('');
+                    } else if(typeof ed.execCommand === 'function'){
+                        ed.execCommand('inserthtml', '');
+                    } else {
+                        return alert('编辑器不支持清空操作');
+                    }
+                }catch(err){ console.error('clear editor failed', err); alert('清空失败: '+(err && err.message?err.message:err)); }
+                // 操作完成后恢复按钮（hideBox 已调用）
+            });
+            // 点击页面其它区域时隐藏确认框并恢复按钮
+            document.addEventListener('click', function(ev){ if(box && box.style.display === 'inline-flex'){ hideBox(); } });
+        })();
     }
 
     // 如果面板存在，重新计算它的位置以确保在悬浮标上方
@@ -288,7 +330,7 @@
         // 更漂亮的样式：圆形按钮，悬停时展开显示完整域名
         h.style.width = '44px';
         h.style.height = '44px';
-        h.style.borderRadius = '50%';
+    h.style.borderRadius = '8px';
         h.style.background = 'linear-gradient(135deg,#1e88e5,#1976d2)';
         h.style.color = '#fff';
         h.style.display = 'flex';
@@ -322,7 +364,7 @@
         });
         h.addEventListener('mouseleave', function(){
             h.style.width = '44px';
-            h.style.borderRadius = '50%';
+            h.style.borderRadius = '8px';
             h.style.padding = '';
             h.style.justifyContent = 'center';
             h.textContent = 'UM';
