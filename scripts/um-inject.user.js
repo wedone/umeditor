@@ -14,16 +14,53 @@
 (function(){
     'use strict';
 
-    // 快速检测编辑器 id（优先带 id 的占位元素）
+    // 更鲁棒地检测编辑器 id：在实际目标站点上会有多种占位形式
+    // - 先收集几类常见占位元素（script[type="text/plain"], textarea, div, contenteditable 等）
+    // - 过滤掉面板本身的 DOM
+    // - 优先尝试用 getEditorInstanceById 验证该 id 是否能取到可用的 UM 实例
+    // - 如果都没找到可验证的实例，回退到首个候选 id 或 'myEditor'
     function detectEditorId(){
-        // 首先查找页面上带 id 的编辑器占位元素，但排除位于油猴面板内的元素
-        var el = Array.prototype.slice.call(document.querySelectorAll('script[type="text/plain"][id], textarea[id], div.edui-editor-container[id]'))
-            .filter(function(node){ return !node.closest || !node.closest('#um-inject-panel'); })[0];
-        if(el && el.id) return el.id;
-        // 回退：查找第一个 data-editor 或 class 包含 edui 的容器，亦跳过面板内元素
-        var alt = Array.prototype.slice.call(document.querySelectorAll('[data-editor-id], .edui-editor'))
-            .filter(function(node){ return !node.closest || !node.closest('#um-inject-panel'); })[0];
-        if(alt && alt.id) return alt.id;
+        var panel = document.getElementById('um-inject-panel');
+        function insidePanel(node){ try{ return !!(panel && node && node.closest && node.closest('#um-inject-panel')); }catch(e){ return false; } }
+
+        var seen = {};
+        var candidates = [];
+
+        // helper to push candidate id if valid and not from panel
+        function pushId(id){ if(!id) return; if(seen[id]) return; seen[id]=true; candidates.push(id); }
+
+        // 1) 常见占位元素（有 id 的）
+        var elems = document.querySelectorAll('script[type="text/plain"], textarea, div, [contenteditable="true"]');
+        Array.prototype.forEach.call(elems, function(node){ if(insidePanel(node)) return; if(node.id) pushId(node.id); if(node.getAttribute && node.getAttribute('name')) pushId(node.getAttribute('name')); });
+
+        // 2) edui / ueditor / umeditor 等 class/id 命名的元素
+        var hintRegex = /(?:um|ue|editor|edui|ueditor|cgeditor|cgEditor|content|question|answer)/i;
+        var allWithId = document.querySelectorAll('[id]');
+        Array.prototype.forEach.call(allWithId, function(node){ if(insidePanel(node)) return; var id = node.id; if(!id) return; if(hintRegex.test(id) || hintRegex.test(node.className || '') || hintRegex.test(node.getAttribute('name')||'')) pushId(id); });
+
+        // 3) data-editor-id 或其它显式标识
+        var dataNodes = document.querySelectorAll('[data-editor-id]');
+        Array.prototype.forEach.call(dataNodes, function(n){ if(insidePanel(n)) return; if(n.id) pushId(n.id); var v = n.getAttribute('data-editor-id'); if(v) pushId(v); });
+
+        // 4) 最后再尝试一些通用回退：第一个非面板的 script[type=text/plain] 或 textarea
+        var fallback = Array.prototype.slice.call(document.querySelectorAll('script[type="text/plain"], textarea, div.edui-editor-container, .edui-editor')).filter(function(node){ return !insidePanel(node); })[0];
+        if(fallback && fallback.id) pushId(fallback.id);
+
+        // 尝试逐个 candidate，用 getEditorInstanceById 验证可访问性（跨 iframe 支持）
+        for(var i=0;i<candidates.length;i++){
+            try{
+                var id = candidates[i];
+                var inst = getEditorInstanceById(id);
+                if(inst && inst.ed) {
+                    console.log('detectEditorId -> verified accessible editor id=', id, ' at ', inst.where, inst.src||'');
+                    return id;
+                }
+            }catch(e){ /* ignore and continue */ }
+        }
+
+        // 如果没有可验证的实例，仍返回第一个候选 id（可能页面上会在稍后初始化 UM）
+        if(candidates.length>0) return candidates[0];
+        // 最终回退
         return 'myEditor';
     }
 
