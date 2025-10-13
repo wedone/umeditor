@@ -82,25 +82,26 @@
         panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.12)';
         panel.style.fontFamily = 'Arial, sans-serif';
         
-        // 改为包含混合输入与按钮
-        panel.innerHTML = '\
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">\
-                <strong style="font-size:13px">UM Injector</strong>\
-                <button id="um-inject-close" style="font-size:12px">关闭</button>\
-            </div>\
-            <div style="margin-bottom:6px">\
-                <label style="font-size:12px">预览（HTML 可用）</label>\
-                <textarea id="um-inject-content" style="width:100%;height:58px"></textarea>\
-            </div>\
-            <div style="margin-bottom:6px">\
-                <label style="font-size:12px">混合文本+LaTeX（支持 $...$, $$...$$, \\\\(...\\\\) 与 \\\\[...\\\\]）</label>\
-                <textarea id="um-inject-mixed" style="width:100%;height:80px"></textarea>\
-            </div>\
-            <div style="display:flex;gap:6px;justify-content:flex-end">\
-                <button id="um-insert-content">插入文本</button>\
-                <button id="um-insert-both">插入文本</button>\
-                <button id="um-insert-mixed">插入混合内容</button>\
-            </div>';
+        // 改为包含混合输入与按钮（使用数组 join 以避免 no-multi-str 警告）
+        panel.innerHTML = [
+            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">',
+            '    <strong style="font-size:13px">UM Injector</strong>',
+            '    <button id="um-inject-close" style="font-size:12px">关闭</button>',
+            '</div>',
+            '<div style="margin-bottom:6px">',
+            '    <label style="font-size:12px">预览（HTML 可用）</label>',
+            '    <textarea id="um-inject-content" style="width:100%;height:58px"></textarea>',
+            '</div>',
+            '<div style="margin-bottom:6px">',
+            '    <label style="font-size:12px">混合文本+LaTeX（支持 $...$, $$...$$, \\(...\\) 与 \\[...\\]）</label>',
+            '    <textarea id="um-inject-mixed" style="width:100%;height:80px"></textarea>',
+            '</div>',
+            '<div style="display:flex;gap:6px;justify-content:flex-end">',
+            '    <button id="um-insert-content">插入文本</button>',
+            '    <button id="um-insert-both">插入文本</button>',
+            '    <button id="um-insert-mixed">插入混合内容</button>',
+            '</div>'
+        ].join('\n');
 
         document.body.appendChild(panel);
 
