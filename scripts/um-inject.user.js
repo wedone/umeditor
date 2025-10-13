@@ -1,7 +1,9 @@
 ﻿// ==UserScript==
 // @name         UMEditor Quick Injector
 // @namespace    http://example.com/
-// @version      1.0
+// @version      2025.10.14.000000
+// @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
+// @downloadURL  http://127.0.0.1:8000/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
 // @author       Generated
 // @match        https://umeditor.vercel.app/*
