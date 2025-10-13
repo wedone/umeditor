@@ -16,12 +16,12 @@
 
     // 主题颜色配置（基于 橙果 色 #ff6000）
     var THEME = {
-        // 选用比 emoji 略深且更稳重的橙色以便区分，同时保留亮色用于渐变/高光
-        primary: '#d35400',    // 深橙，便于在 UI 元素上与 emoji 区分
-        primaryLight: '#ff7a20',
-        // shadow / focus 使用与 primary 近似的 rgba
-        shadow: 'rgba(211,84,0,0.22)',
-        focus: 'rgba(211,84,0,0.14)'
+        // 更暗的主题色，降低明度以减少刺眼感
+        primary: '#9b3a00',    // 更沉稳的深橙
+        primaryLight: '#b65a00',
+        // shadow / focus 使用更深色的 rgba
+        shadow: 'rgba(155,58,0,0.22)',
+        focus: 'rgba(155,58,0,0.14)'
     };
 
     // 更鲁棒地检测编辑器 id：在实际目标站点上会有多种占位形式
@@ -147,7 +147,7 @@
         
         // 改为包含混合输入与按钮（带头部样式）
         panel.innerHTML = '\
-            <div id="um-inject-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:linear-gradient(90deg,#ff7a20,#ff6000);color:#fff;">\
+            <div id="um-inject-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:linear-gradient(90deg,#b65a00,#9b3a00);color:#fff;">\
                 <div style="display:flex;align-items:center;gap:10px">\
                     <div id="um-inject-badge" style="width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">🍊</div>\
                     <strong style="font-size:14px;letter-spacing:0.2px">橙果错题助手</strong>\
@@ -156,12 +156,8 @@
             </div>\
             <div style="padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,250,252,0.98));">\
                 <div>\
-                    <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">预览（HTML 可用）</label>\
-                    <textarea id="um-inject-content" style="width:100%;height:62px;border:1px solid rgba(0,0,0,0.06);padding:8px;border-radius:6px;resize:vertical;font-family:inherit;font-size:13px"></textarea>\
-                </div>\
-                <div>\
-                    <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">混合文本+LaTeX（支持 $...$ / $$...$$ / \\(...\\) / \\[...\\]）</label>\
-                    <textarea id="um-inject-mixed" style="width:100%;height:110px;border:1px solid rgba(0,0,0,0.06);padding:8px;border-radius:6px;resize:vertical;font-family:Menlo,Consolas,monospace;font-size:13px"></textarea>\
+                    <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">文本+LaTeX混合（支持 $...$ / $$...$$ / \\(...\\) / \\[...\\]）</label>\
+                    <textarea id="um-inject-mixed" style="width:100%;height:180px;border:1px solid rgba(0,0,0,0.06);padding:8px;border-radius:6px;resize:vertical;font-family:Menlo,Consolas,monospace;font-size:13px"></textarea>\
                 </div>\
                 <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px">\
                     <div style="display:flex;align-items:center">\
@@ -174,7 +170,7 @@
                     </div>\
                     <div style="display:flex;gap:8px">\
                         <button id="um-insert-content" aria-label="插入文本" style="background:linear-gradient(180deg,#f3f4f6,#eef1f6);border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:6px;cursor:pointer">插入文本</button>\
-                        <button id="um-insert-mixed" aria-label="插入混合内容" style="background:linear-gradient(180deg,#ff7a20,#ff6000);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">插入混合内容</button>\
+                        <button id="um-insert-mixed" aria-label="插入混合内容" style="background:linear-gradient(180deg,#b65a00,#9b3a00);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">插入混合内容</button>\
                     </div>\
                 </div>\
             </div>';
@@ -193,7 +189,7 @@
 
         // 简单美化交互：按钮 hover 动画和 focus 样式（通过 JS 绑定以避免复杂样式注入）
         (function(){
-            var ids = ['um-inject-close','um-clear-editor','um-clear-confirm-yes','um-clear-confirm-no','um-insert-content','um-insert-mixed'];
+            var ids = ['um-inject-close','um-clear-editor','um-clear-confirm-yes','um-clear-confirm-no','um-insert-mixed'];
             ids.forEach(function(id){
                 var el = document.getElementById(id);
                 if(!el) return;
@@ -207,11 +203,7 @@
 
         document.getElementById('um-inject-close').addEventListener('click', function(){ panel.style.display = 'none'; });
 
-        document.getElementById('um-insert-content').addEventListener('click', function(){
-            var c = document.getElementById('um-inject-content').value || '';
-            insertContent(c);
-        });
-        // 已移除重复按钮：只保留插入文本与插入混合内容两项
+        // 已移除预览和单独插入文本按钮：只保留插入混合内容一项
         document.getElementById('um-insert-mixed').addEventListener('click', function(){
             var mixed = document.getElementById('um-inject-mixed').value || '';
             if(!mixed) return alert('混合内容为空');
@@ -413,12 +405,12 @@
         h.style.width = '44px';
         h.style.height = '44px';
     h.style.borderRadius = '8px';
-    h.style.background = 'linear-gradient(135deg,#ff7a20,#ff6000)';
+    h.style.background = 'linear-gradient(135deg,#b65a00,#9b3a00)';
     h.style.color = '#fff';
         h.style.display = 'flex';
         h.style.alignItems = 'center';
         h.style.justifyContent = 'center';
-    h.style.boxShadow = '0 6px 20px rgba(255,96,0,0.22)';
+    h.style.boxShadow = '0 6px 20px '+THEME.shadow;
         h.style.cursor = 'pointer';
         h.style.zIndex = 1000000;
         h.style.fontWeight = '700';
