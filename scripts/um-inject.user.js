@@ -1,10 +1,13 @@
-// ==UserScript==
+﻿// ==UserScript==
 // @name         UMEditor Quick Injector
 // @namespace    http://example.com/
-// @version      1.0
+// @version      2025.10.13.232643
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
 // @author       Generated
 // @match        https://umeditor.vercel.app/*
+// @match        https://www.91chengguo.com/*
+// @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
+// @downloadURL  http://127.0.0.1:8000/scripts/um-inject.user.js
 // @grant        none
 // ==/UserScript==
 
@@ -13,10 +16,13 @@
 
     // 快速检测编辑器 id（优先带 id 的占位元素）
     function detectEditorId(){
-        var el = document.querySelector('script[type="text/plain"][id], textarea[id], div.edui-editor-container[id]');
+        // 首先查找页面上带 id 的编辑器占位元素，但排除位于油猴面板内的元素
+        var el = Array.prototype.slice.call(document.querySelectorAll('script[type="text/plain"][id], textarea[id], div.edui-editor-container[id]'))
+            .filter(function(node){ return !node.closest || !node.closest('#um-inject-panel'); })[0];
         if(el && el.id) return el.id;
-        // 回退：查找第一个 data-editor 或 class 包含 edui 的容器
-        var alt = document.querySelector('[data-editor-id], .edui-editor');
+        // 回退：查找第一个 data-editor 或 class 包含 edui 的容器，亦跳过面板内元素
+        var alt = Array.prototype.slice.call(document.querySelectorAll('[data-editor-id], .edui-editor'))
+            .filter(function(node){ return !node.closest || !node.closest('#um-inject-panel'); })[0];
         if(alt && alt.id) return alt.id;
         return 'myEditor';
     }
@@ -28,6 +34,33 @@
             }
         }, 200);
         setTimeout(function(){ clearInterval(t); }, 15000);
+    }
+
+    // 尝试根据 editor id 在当前 window 或同源 iframes 中获取 UM editor 实例
+    function getEditorInstanceById(id){
+        try{
+            if(window.UM && typeof window.UM.getEditor === 'function'){
+                var ed = window.UM.getEditor(id);
+                if(ed) return {ed: ed, win: window, where: 'top'};
+            }
+        }catch(e){ /* ignore */ }
+        // 搜索同源 iframe
+        var iframes = document.getElementsByTagName('iframe');
+        for(var i=0;i<iframes.length;i++){
+            var fr = iframes[i];
+            try{
+                var cw = fr.contentWindow;
+                if(!cw) continue;
+                if(cw.UM && typeof cw.UM.getEditor === 'function'){
+                    var ed2 = cw.UM.getEditor(id);
+                    if(ed2) return {ed: ed2, win: cw, where: 'iframe', src: fr.src||fr.getAttribute('data-src')||fr.id||''};
+                }
+            }catch(e){
+                // 可能跨域访问被拒绝，跳过
+                // console.log('iframe access denied', e);
+            }
+        }
+        return null;
     }
 
     // 创建浮动面板
@@ -53,12 +86,8 @@
                 <button id="um-inject-close" style="font-size:12px">关闭</button>\
             </div>\
             <div style="margin-bottom:6px">\
-                <label style="font-size:12px">文本 (HTML 可用)</label>\
+                <label style="font-size:12px">预览（HTML 可用）</label>\
                 <textarea id="um-inject-content" style="width:100%;height:58px"></textarea>\
-            </div>\
-            <div style="margin-bottom:6px">\
-                <label style="font-size:12px">LaTeX (原文，例如 \\\\frac{a}{b})</label>\
-                <input id="um-inject-latex" style="width:100%"/>\
             </div>\
             <div style="margin-bottom:6px">\
                 <label style="font-size:12px">混合文本+LaTeX（支持 $...$, $$...$$, \\\\(...\\\\) 与 \\\\[...\\\\]）</label>\
@@ -66,8 +95,7 @@
             </div>\
             <div style="display:flex;gap:6px;justify-content:flex-end">\
                 <button id="um-insert-content">插入文本</button>\
-                <button id="um-insert-latex">插入公式</button>\
-                <button id="um-insert-both">插入二者</button>\
+                <button id="um-insert-both">插入文本</button>\
                 <button id="um-insert-mixed">插入混合内容</button>\
             </div>';
 
@@ -79,15 +107,10 @@
             var c = document.getElementById('um-inject-content').value || '';
             insertContent(c);
         });
-        document.getElementById('um-insert-latex').addEventListener('click', function(){
-            var l = document.getElementById('um-inject-latex').value || '';
-            insertLatex(l);
-        });
         document.getElementById('um-insert-both').addEventListener('click', function(){
             var c = document.getElementById('um-inject-content').value || '';
-            var l = document.getElementById('um-inject-latex').value || '';
+            // 原来的 "插入二者" 改为仅插入文本内容以简化界面
             if(c) insertContent(c);
-            if(l) insertLatex(l);
         });
         document.getElementById('um-insert-mixed').addEventListener('click', function(){
             var mixed = document.getElementById('um-inject-mixed').value || '';
@@ -161,17 +184,30 @@
         }
         if (lastIndex < mixedText.length) { var tail = mixedText.slice(lastIndex); if (tail) parts.push(textToHtml(tail)); }
         var html = parts.join('');
-        try { var id = detectEditorId(); var ed = UM.getEditor(id) || UM.getEditor('myEditor'); if(!ed) return alert('找不到编辑器实例'); ed.execCommand('inserthtml', html); }
-        catch(e) { console.error('inserthtml failed', e); alert('插入失败: '+e.message); }
+        try {
+            var id = detectEditorId();
+            var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
+            if(!inst || !inst.ed) return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
+            console.log('injectMixedContentToUM -> target id=', id, 'found at', inst.where, 'src=', inst.src||'');
+            inst.ed.execCommand('inserthtml', html);
+        }
+        catch(e) { console.error('inserthtml failed', e); alert('插入失败: '+(e && e.message ? e.message : e)); }
     }
 
     function insertContent(html){
         try{
             var id = detectEditorId();
-            var ed = UM.getEditor(id);
-            if(!ed) ed = UM.getEditor('myEditor');
-            if(!ed) return alert('找不到编辑器实例');
-            ed.execCommand('inserthtml', html, true);
+            var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
+            if(!inst || !inst.ed) return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
+            console.log('insertContent -> target id=', id, 'found at', inst.where, 'src=', inst.src||'');
+            var ed = inst.ed;
+            // 改为替换整个编辑器内容（覆盖），而不是在当前位置插入
+            if (typeof ed.setContent === 'function') {
+                ed.setContent(html);
+            } else {
+                // 回退到插入方式（老版本可能没有 setContent）
+                ed.execCommand('inserthtml', html, true);
+            }
         }catch(e){ console.error('insertContent error', e); alert('插入失败: '+e.message); }
     }
 
@@ -193,7 +229,9 @@
             if(!document.getElementById('um-inject-panel')) createPanel();
             var panel = document.getElementById('um-inject-panel');
             panel.style.display = (panel.style.display === 'none') ? 'block' : 'block';
-            document.getElementById('um-inject-latex').focus();
+            // 已移除独立 LaTeX 输入，改为聚焦混合输入框
+            var mixedEl = document.getElementById('um-inject-mixed');
+            if(mixedEl) mixedEl.focus();
         }
     }, false);
 
@@ -201,6 +239,56 @@
     waitForUM(function(){
         console.log('UM detected - UM Injector available (Ctrl+Alt+I)');
         // 提前不渲染 panel，等热键按下创建
+        // 创建页面右下角的小悬浮标（显示简短域名），点击展开/收起面板
+        try{
+            createHandle();
+        }catch(e){console.error('createHandle failed', e)}
     });
 
+    function createHandle(){
+        if(document.getElementById('um-inject-handle')) return;
+        var h = document.createElement('div');
+        h.id = 'um-inject-handle';
+        h.style.position = 'fixed';
+        h.style.right = '20px';
+        h.style.bottom = '90px';
+        h.style.width = '44px';
+        h.style.height = '44px';
+        h.style.borderRadius = '6px';
+        h.style.background = 'rgba(0,122,204,0.95)';
+        h.style.color = '#fff';
+        h.style.display = 'flex';
+        h.style.alignItems = 'center';
+        h.style.justifyContent = 'center';
+        h.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+        h.style.cursor = 'pointer';
+        h.style.zIndex = 1000000;
+    h.title = 'UM Injector - 点击展开/收起面板 (' + (window.location.hostname||'') + ')';
+    // 更美观的圆形徽章（显示 UM）
+    h.textContent = 'UM';
+    h.style.fontWeight = '700';
+    h.style.fontFamily = 'Helvetica,Arial,sans-serif';
+    h.style.letterSpacing = '0.5px';
+    h.style.fontSize = '14px';
+    h.style.background = 'linear-gradient(135deg,#0b79d0,#00aaff)';
+    h.style.border = '1px solid rgba(255,255,255,0.15)';
+    h.style.backdropFilter = 'saturate(120%) blur(4px)';
+    h.style.transition = 'transform 120ms ease, box-shadow 120ms ease';
+    h.style.boxShadow = '0 6px 18px rgba(0,0,0,0.18)';
+    h.style.padding = '0';
+    h.style.textAlign = 'center';
+    h.style.lineHeight = '44px';
+    h.style.borderRadius = '50%';
+    h.addEventListener('mouseenter', function(){ h.style.transform = 'scale(1.08)'; });
+    h.addEventListener('mouseleave', function(){ h.style.transform = 'scale(1)'; });
+        h.addEventListener('click', function(){
+            if(!document.getElementById('um-inject-panel')) createPanel();
+            var p = document.getElementById('um-inject-panel');
+            if(!p) return;
+            p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
+        });
+        document.body.appendChild(h);
+    }
+
 })();
+
