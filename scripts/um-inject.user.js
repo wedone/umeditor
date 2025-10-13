@@ -1,18 +1,13 @@
 ﻿// ==UserScript==
 // @name         UMEditor Quick Injector
 // @namespace    http://example.com/
-// @version      2025.10.13.232643
+// @version      1.0
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
 // @author       Generated
 // @match        https://umeditor.vercel.app/*
 // @match        https://www.91chengguo.com/*
-// @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
-// @downloadURL  http://127.0.0.1:8000/scripts/um-inject.user.js
 // @grant        none
 // ==/UserScript==
-
-/* eslint-env browser */
-/* global UM */
 
 (function(){
     'use strict';
@@ -72,8 +67,25 @@
         var panel = document.createElement('div');
         panel.id = 'um-inject-panel';
         panel.style.position = 'fixed';
-        panel.style.right = '20px';
-        panel.style.bottom = '20px';
+        // 如果悬浮标存在，把面板放在悬浮标的上方并略微左移；否则使用默认右下角位置
+        var handle = document.getElementById('um-inject-handle');
+        if (handle) {
+            try {
+                var hr = handle.getBoundingClientRect();
+                // 计算 right 为视口右边到 handle 右边的距离，再加一个小间距
+                var rightPx = Math.max(12, (window.innerWidth - hr.right) + 8);
+                // 计算 bottom 为视口底部到 handle.top 的距离，再加一些间距使面板悬于其上方
+                var bottomPx = Math.max(12, (window.innerHeight - hr.top) + 12);
+                panel.style.right = rightPx + 'px';
+                panel.style.bottom = bottomPx + 'px';
+            } catch (e) {
+                panel.style.right = '20px';
+                panel.style.bottom = '20px';
+            }
+        } else {
+            panel.style.right = '20px';
+            panel.style.bottom = '20px';
+        }
         panel.style.width = '360px';
         panel.style.zIndex = 999999;
         panel.style.background = 'rgba(255,255,255,0.98)';
@@ -82,26 +94,25 @@
         panel.style.boxShadow = '0 6px 18px rgba(0,0,0,0.12)';
         panel.style.fontFamily = 'Arial, sans-serif';
         
-        // 改为包含混合输入与按钮（使用数组 join 以避免 no-multi-str 警告）
-        panel.innerHTML = [
-            '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">',
-            '    <strong style="font-size:13px">UM Injector</strong>',
-            '    <button id="um-inject-close" style="font-size:12px">关闭</button>',
-            '</div>',
-            '<div style="margin-bottom:6px">',
-            '    <label style="font-size:12px">预览（HTML 可用）</label>',
-            '    <textarea id="um-inject-content" style="width:100%;height:58px"></textarea>',
-            '</div>',
-            '<div style="margin-bottom:6px">',
-            '    <label style="font-size:12px">混合文本+LaTeX（支持 $...$, $$...$$, \\(...\\) 与 \\[...\\]）</label>',
-            '    <textarea id="um-inject-mixed" style="width:100%;height:80px"></textarea>',
-            '</div>',
-            '<div style="display:flex;gap:6px;justify-content:flex-end">',
-            '    <button id="um-insert-content">插入文本</button>',
-            '    <button id="um-insert-both">插入文本</button>',
-            '    <button id="um-insert-mixed">插入混合内容</button>',
-            '</div>'
-        ].join('\n');
+        // 改为包含混合输入与按钮
+        panel.innerHTML = '\
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">\
+                <strong style="font-size:13px">UM Injector</strong>\
+                <button id="um-inject-close" style="font-size:12px">关闭</button>\
+            </div>\
+            <div style="margin-bottom:6px">\
+                <label style="font-size:12px">预览（HTML 可用）</label>\
+                <textarea id="um-inject-content" style="width:100%;height:58px"></textarea>\
+            </div>\
+            <div style="margin-bottom:6px">\
+                <label style="font-size:12px">混合文本+LaTeX（支持 $...$, $$...$$, \\\\(...\\\\) 与 \\\\[...\\\\]）</label>\
+                <textarea id="um-inject-mixed" style="width:100%;height:80px"></textarea>\
+            </div>\
+            <div style="display:flex;gap:6px;justify-content:flex-end">\
+                <button id="um-insert-content">插入文本</button>\
+                <button id="um-insert-both">插入文本</button>\
+                <button id="um-insert-mixed">插入混合内容</button>\
+            </div>';
 
         document.body.appendChild(panel);
 
@@ -125,6 +136,22 @@
             injectMixedContentToUM(ed, mixed);
         });
     }
+
+    // 如果面板存在，重新计算它的位置以确保在悬浮标上方
+    function repositionPanelAboveHandle(){
+        var panel = document.getElementById('um-inject-panel');
+        var handle = document.getElementById('um-inject-handle');
+        if(!panel || !handle) return;
+        try{
+            var hr = handle.getBoundingClientRect();
+            var rightPx = Math.max(12, (window.innerWidth - hr.right) + 8);
+            var bottomPx = Math.max(12, (window.innerHeight - hr.top) + 12);
+            panel.style.right = rightPx + 'px';
+            panel.style.bottom = bottomPx + 'px';
+        }catch(e){/* ignore */}
+    }
+
+    window.addEventListener('resize', function(){ repositionPanelAboveHandle(); });
 
     // 注入混合内容函数（与 demo-inject.html 中一致）
     // LaTeX 预处理，和 demo 页面保持一致
@@ -256,43 +283,49 @@
         h.style.position = 'fixed';
         h.style.right = '20px';
         h.style.bottom = '90px';
+        // 更漂亮的样式：圆形按钮，悬停时展开显示完整域名
         h.style.width = '44px';
         h.style.height = '44px';
-        h.style.borderRadius = '6px';
-        h.style.background = 'rgba(0,122,204,0.95)';
+        h.style.borderRadius = '50%';
+        h.style.background = 'linear-gradient(135deg,#1e88e5,#1976d2)';
         h.style.color = '#fff';
         h.style.display = 'flex';
         h.style.alignItems = 'center';
         h.style.justifyContent = 'center';
-        h.style.boxShadow = '0 4px 12px rgba(0,0,0,0.2)';
+        h.style.boxShadow = '0 6px 20px rgba(25,118,210,0.24)';
         h.style.cursor = 'pointer';
         h.style.zIndex = 1000000;
-    h.title = 'UM Injector - 点击展开/收起面板 (' + (window.location.hostname||'') + ')';
-    // 更美观的圆形徽章（显示 UM）
-    h.textContent = 'UM';
-    h.style.fontWeight = '700';
-    h.style.fontFamily = 'Helvetica,Arial,sans-serif';
-    h.style.letterSpacing = '0.5px';
-    h.style.fontSize = '14px';
-    h.style.background = 'linear-gradient(135deg,#0b79d0,#00aaff)';
-    h.style.border = '1px solid rgba(255,255,255,0.15)';
-    h.style.backdropFilter = 'saturate(120%) blur(4px)';
-    h.style.transition = 'transform 120ms ease, box-shadow 120ms ease';
-    h.style.boxShadow = '0 6px 18px rgba(0,0,0,0.18)';
-    h.style.padding = '0';
-    h.style.textAlign = 'center';
-    h.style.lineHeight = '44px';
-    h.style.borderRadius = '50%';
-    h.addEventListener('mouseenter', function(){ h.style.transform = 'scale(1.08)'; });
-    h.addEventListener('mouseleave', function(){ h.style.transform = 'scale(1)'; });
+        h.style.fontWeight = '700';
+        h.style.fontSize = '13px';
+        h.style.transition = 'width 180ms ease, padding 180ms ease, border-radius 180ms ease';
+        h.title = 'UM Injector - 点击展开/收起面板';
+        // host 用于悬停时显示
+        var fullHost = window.location.hostname || 'site';
+        // 默认显示简短标识 "UM"
+        h.textContent = 'UM';
+        // 点击切换面板
         h.addEventListener('click', function(){
             if(!document.getElementById('um-inject-panel')) createPanel();
             var p = document.getElementById('um-inject-panel');
             if(!p) return;
             p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
         });
+        // 悬停展开显示完整域名
+        h.addEventListener('mouseenter', function(){
+            h.style.width = '170px';
+            h.style.borderRadius = '8px';
+            h.style.padding = '0 12px';
+            h.style.justifyContent = 'flex-start';
+            h.textContent = 'UM Injector — ' + fullHost.replace(/^www\./,'');
+        });
+        h.addEventListener('mouseleave', function(){
+            h.style.width = '44px';
+            h.style.borderRadius = '50%';
+            h.style.padding = '';
+            h.style.justifyContent = 'center';
+            h.textContent = 'UM';
+        });
         document.body.appendChild(h);
     }
 
 })();
-
