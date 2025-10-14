@@ -177,6 +177,18 @@
 
         document.body.appendChild(panel);
 
+        // 使用 THEME 统一面板中关键元素的颜色（避免大量内联字符串替换）
+        try{
+            var hdr = document.getElementById('um-inject-header');
+            if(hdr) hdr.style.background = 'linear-gradient(90deg,'+THEME.primaryLight+','+THEME.primary+')';
+            var insertBtn = document.getElementById('um-insert-mixed');
+            if(insertBtn) insertBtn.style.background = 'linear-gradient(180deg,'+THEME.primaryLight+','+THEME.primary+')';
+            var clearBtn = document.getElementById('um-clear-editor');
+            if(clearBtn) clearBtn.style.background = THEME.primary;
+            var clearYes = document.getElementById('um-clear-confirm-yes');
+            if(clearYes) clearYes.style.background = THEME.primary;
+        }catch(e){/* ignore styling errors */}
+
         // 强制面板内元素使用 border-box，避免 width:100% + padding 导致溢出
         (function(){
             try{
@@ -281,8 +293,26 @@
         s = s.replace(/\\\{/g, '\\lbrace').replace(/\\\}/g, '\\rbrace');
         s = s.replace(/<<LEFTLBRACE>>/g, '\\left\\{').replace(/<<RIGHTRBRACE>>/g, '\\right\\}');
         s = s.replace(/\s{2,}/g, ' ');
-        // MathQuill 对 \mathbb 支持有限，降级为 \mathrm 以保证渲染
-        s = s.replace(/\\mathbb\{([^}]+?)\}/g, function(_, inner){ return '\\mathrm{' + inner + '}'; });
+    // MathQuill 对 \mathbb 的支持是有限的，但项目中已有对常见集合的映射。
+    // 之前为了稳定渲染把所有 \mathbb{...} 降级为 \mathrm{...}，
+    // 这会导致像 "\\mathbb{Z}" 这样的常见符号被错误降级为普通体。
+    // 先注释掉全局降级，保留这段作为说明，方便后续回退或做更细粒度的降级：
+    // s = s.replace(/\\mathbb\{([^}]+?)\}/g, function(_, inner){ return '\\mathrm{' + inner + '}'; });
+        // 增加对常见单字符集合的映射（保留可读性同时保证渲染）：
+        // 只匹配单个字母的大括号形式，例如 \mathbb{Z} -> ℤ
+        var mathbbMap = {
+            'N': '\u2115', // ℕ
+            'Z': '\u2124', // ℤ
+            'Q': '\u211A', // ℚ
+            'R': '\u211D', // ℝ
+            'C': '\u2102', // ℂ
+            'H': '\u210D', // ℍ
+            'P': '\u2119'  // ℙ
+        };
+        s = s.replace(/\\mathbb\{([A-Za-z])\}/g, function(_, ch){
+            if(mathbbMap.hasOwnProperty(ch)) return mathbbMap[ch];
+            return '\\mathbb{' + ch + '}';
+        });
         // 处理 mhchem 的 \ce{...}：支持嵌套大括号的解析，保留内部内容并用大括号包裹以保留分组
         s = (function(str){
             var out = '';
@@ -311,6 +341,31 @@
 
     function injectMixedContentToUM(editor, mixedText) {
         if (!editor || !editor.execCommand) { console.error('editor not found or invalid'); return; }
+        // 如果整个输入就是一个单独的公式 token（行内或显示），优先使用编辑器的公式命令插入。
+        try{
+            var whole = String(mixedText || '').trim();
+            var fullRe = /^(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)$/;
+            var mFull = whole.match(fullRe);
+            if(mFull){
+                var token = mFull[1];
+                var latex = token;
+                if (token.startsWith('$$') && token.endsWith('$$')) { latex = token.slice(2, -2); }
+                else if (token.indexOf('\\[') === 0 && token.slice(-2) === '\\]') { latex = token.slice(2, -2); }
+                else if (token.indexOf('\\(') === 0 && token.slice(-2) === '\\)') { latex = token.slice(2, -2); }
+                else if (token.indexOf('$') === 0 && token.slice(-1) === '$') { latex = token.slice(1, -1); }
+                latex = latex.trim();
+                var normalizedWhole = normalizeLatexForMathQuill(latex);
+                try{
+                    // 优先调用官方命令，若成功返回
+                    if(typeof editor.execCommand === 'function'){
+                        editor.execCommand('formula', normalizedWhole);
+                        return;
+                    }
+                }catch(err){
+                    console.warn('execCommand formula failed, falling back to HTML insert', err);
+                }
+            }
+        }catch(e){ /* ignore and continue to fallback */ }
         function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
         function textToHtml(s) { if(!s) return ''; s = String(s).replace(/\r\n/g,'\n').replace(/\r/g,'\n'); var esc = escapeHtml(s); esc = esc.replace(/\n{2,}/g,'<br><br>'); esc = esc.replace(/\n/g,'<br>'); return esc; }
         var re = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)/g;
@@ -405,7 +460,7 @@
         h.style.width = '44px';
         h.style.height = '44px';
     h.style.borderRadius = '8px';
-    h.style.background = 'linear-gradient(135deg,#b65a00,#9b3a00)';
+    h.style.background = 'linear-gradient(135deg,'+THEME.primaryLight+','+THEME.primary+')';
     h.style.color = '#fff';
         h.style.display = 'flex';
         h.style.alignItems = 'center';
