@@ -426,13 +426,22 @@
             var lines = s.split('\n');
             var out = [];
             var inUl = false, inOl = false;
+            // For scheme A: merge consecutive non-list, non-heading non-empty lines into one paragraph
+            var paragraphBuffer = [];
+            function flushParagraphBuffer(){
+                if(paragraphBuffer.length === 0) return;
+                // join with <br> to represent single-line breaks inside a paragraph
+                out.push('<p>' + paragraphBuffer.map(inlineMarkdown).join('<br>') + '</p>');
+                paragraphBuffer = [];
+            }
             for(var i=0;i<lines.length;i++){
                 var line = lines[i];
                 var trimmed = line.replace(/^\s+|\s+$/g,'');
                 // headings ### / ## / #
                 var m = trimmed.match(/^(#{1,6})\s+(.*)$/);
                 if(m){
-                    // close lists if open
+                    // close paragraph/list if open
+                    flushParagraphBuffer();
                     if(inUl){ out.push('</ul>'); inUl=false; }
                     if(inOl){ out.push('</ol>'); inOl=false; }
                     var level = Math.min(6, m[1].length);
@@ -441,6 +450,8 @@
                 }
                 // unordered list
                 if(/^[\-*+]\s+/.test(trimmed)){
+                    // close paragraph if open
+                    flushParagraphBuffer();
                     if(!inUl){ out.push('<ul>'); inUl=true; }
                     out.push('<li>' + inlineMarkdown(trimmed.replace(/^[\-*+]\s+/,'')) + '</li>');
                     continue;
@@ -448,20 +459,26 @@
                 // ordered list
                 var mo = trimmed.match(/^\d+\.\s+(.*)$/);
                 if(mo){
+                    // close paragraph if open
+                    flushParagraphBuffer();
                     if(!inOl){ out.push('<ol>'); inOl=true; }
                     out.push('<li>' + inlineMarkdown(mo[1]) + '</li>');
                     continue;
                 }
-                // blank line
+                // blank line: close lists and flush paragraph buffer (represent paragraph break)
                 if(trimmed === ''){
                     if(inUl){ out.push('</ul>'); inUl=false; }
                     if(inOl){ out.push('</ol>'); inOl=false; }
+                    flushParagraphBuffer();
+                    // create an empty paragraph to preserve explicit blank line
                     out.push('<p></p>');
                     continue;
                 }
-                // normal paragraph line
-                out.push('<p>' + inlineMarkdown(trimmed) + '</p>');
+                // normal paragraph line: buffer it (do not immediately create <p>)
+                paragraphBuffer.push(trimmed);
             }
+            // flush any remaining open states
+            flushParagraphBuffer();
             if(inUl) out.push('</ul>');
             if(inOl) out.push('</ol>');
             return out.join('');
