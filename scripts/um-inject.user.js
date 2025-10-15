@@ -426,22 +426,13 @@
             var lines = s.split('\n');
             var out = [];
             var inUl = false, inOl = false;
-            // For scheme A: merge consecutive non-list, non-heading non-empty lines into one paragraph
-            var paragraphBuffer = [];
-            function flushParagraphBuffer(){
-                if(paragraphBuffer.length === 0) return;
-                // join with <br> to represent single-line breaks inside a paragraph
-                out.push('<p>' + paragraphBuffer.map(inlineMarkdown).join('<br>') + '</p>');
-                paragraphBuffer = [];
-            }
             for(var i=0;i<lines.length;i++){
                 var line = lines[i];
                 var trimmed = line.replace(/^\s+|\s+$/g,'');
                 // headings ### / ## / #
                 var m = trimmed.match(/^(#{1,6})\s+(.*)$/);
                 if(m){
-                    // close paragraph/list if open
-                    flushParagraphBuffer();
+                    // close lists if open
                     if(inUl){ out.push('</ul>'); inUl=false; }
                     if(inOl){ out.push('</ol>'); inOl=false; }
                     var level = Math.min(6, m[1].length);
@@ -450,8 +441,6 @@
                 }
                 // unordered list
                 if(/^[\-*+]\s+/.test(trimmed)){
-                    // close paragraph if open
-                    flushParagraphBuffer();
                     if(!inUl){ out.push('<ul>'); inUl=true; }
                     out.push('<li>' + inlineMarkdown(trimmed.replace(/^[\-*+]\s+/,'')) + '</li>');
                     continue;
@@ -459,26 +448,20 @@
                 // ordered list
                 var mo = trimmed.match(/^\d+\.\s+(.*)$/);
                 if(mo){
-                    // close paragraph if open
-                    flushParagraphBuffer();
                     if(!inOl){ out.push('<ol>'); inOl=true; }
                     out.push('<li>' + inlineMarkdown(mo[1]) + '</li>');
                     continue;
                 }
-                // blank line: close lists and flush paragraph buffer (represent paragraph break)
+                // blank line
                 if(trimmed === ''){
                     if(inUl){ out.push('</ul>'); inUl=false; }
                     if(inOl){ out.push('</ol>'); inOl=false; }
-                    flushParagraphBuffer();
-                    // create an empty paragraph to preserve explicit blank line
                     out.push('<p></p>');
                     continue;
                 }
-                // normal paragraph line: buffer it (do not immediately create <p>)
-                paragraphBuffer.push(trimmed);
+                // normal paragraph line
+                out.push('<p>' + inlineMarkdown(trimmed) + '</p>');
             }
-            // flush any remaining open states
-            flushParagraphBuffer();
             if(inUl) out.push('</ul>');
             if(inOl) out.push('</ol>');
             return out.join('');
@@ -495,25 +478,70 @@
                 return t;
             }
         }
-        var re = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)/g;
-        var lastIndex = 0; var m; var parts = [];
-        while ((m = re.exec(mixedText)) !== null) {
-            var idx = m.index;
-            if (idx > lastIndex) { var textSegment = mixedText.slice(lastIndex, idx); if (textSegment) parts.push(textToHtml(textSegment)); }
-            var token = m[0]; var latex = token; var isDisplay = false;
-            if (token.startsWith('$$') && token.endsWith('$$')) { latex = token.slice(2, -2); isDisplay = true; }
-            else if (token.startsWith('\\[') && token.endsWith('\\]')) { latex = token.slice(2, -2); isDisplay = true; }
-            else if (token.startsWith('\\(') && token.endsWith('\\)')) { latex = token.slice(2, -2); isDisplay = false; }
-            else if (token.startsWith('$') && token.endsWith('$')) { latex = token.slice(1, -1); isDisplay = false; }
-            latex = latex.trim();
-            // 预处理 latex
-            var normalized = normalizeLatexForMathQuill(latex);
-            var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
-            if (isDisplay) parts.push('<div class="math-display">' + span + '</div>'); else parts.push(span);
-            lastIndex = re.lastIndex;
+        // 先将 LaTeX 片段替换为占位符，执行 Markdown->HTML（保留占位符），
+        // 然后把占位符替换为 normalize 后的公式 HTML（span 或 display div），最后一次性插入。
+        var latexRe = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)/g;
+        var tokens = [];
+        var counter = 0;
+        // 用占位符替换 LaTeX 片段，以免被 Markdown 解析影响
+        var withPlaceholders = String(mixedText).replace(latexRe, function(m){
+            var id = counter++;
+            tokens.push({raw: m, id: id});
+            return '@@UM_LATEX_' + id + '@@';
+        });
+
+        // 轻量 Markdown -> HTML（按段落/标题/列表处理），对占位符保持原样
+        function markdownToHtml(md){
+            if(!md) return '';
+            md = String(md).replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+            function esc(t){ return String(t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+            function inlineMarkdown(t){
+                t = esc(t);
+                t = t.replace(/`([^`]+?)`/g, function(_, c){ return '<code>' + esc(c) + '</code>'; });
+                t = t.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+                t = t.replace(/\*([^*]+?)\*/g, '<em>$1</em>');
+                return t;
+            }
+            var lines = md.split('\n');
+            var out = [];
+            var inUl = false, inOl = false;
+            for(var i=0;i<lines.length;i++){
+                var line = lines[i];
+                var trimmed = line.replace(/^\s+|\s+$/g,'');
+                var mh = trimmed.match(/^(#{1,6})\s+(.*)$/);
+                if(mh){ if(inUl){ out.push('</ul>'); inUl=false; } if(inOl){ out.push('</ol>'); inOl=false; } var level = Math.min(6, mh[1].length); out.push('<h'+level+'>' + inlineMarkdown(mh[2]) + '</h'+level+'>'); continue; }
+                if(/^[\-*+]\s+/.test(trimmed)){
+                    if(!inUl){ out.push('<ul>'); inUl=true; }
+                    out.push('<li>' + inlineMarkdown(trimmed.replace(/^[\-*+]\s+/,'')) + '</li>');
+                    continue;
+                }
+                var mo = trimmed.match(/^\d+\.\s+(.*)$/);
+                if(mo){ if(!inOl){ out.push('<ol>'); inOl=true; } out.push('<li>' + inlineMarkdown(mo[1]) + '</li>'); continue; }
+                if(trimmed === ''){ if(inUl){ out.push('</ul>'); inUl=false; } if(inOl){ out.push('</ol>'); inOl=false; } out.push('<p></p>'); continue; }
+                out.push('<p>' + inlineMarkdown(trimmed) + '</p>');
+            }
+            if(inUl) out.push('</ul>'); if(inOl) out.push('</ol>');
+            return out.join('');
         }
-        if (lastIndex < mixedText.length) { var tail = mixedText.slice(lastIndex); if (tail) parts.push(textToHtml(tail)); }
-        var html = parts.join('');
+
+        var html = markdownToHtml(withPlaceholders);
+
+        // 把占位符替换为公式 HTML
+        for(var i=0;i<tokens.length;i++){
+            var tkn = tokens[i].raw;
+            var token = tkn;
+            var isDisplay = false;
+            if (token.indexOf('$$') === 0 && token.lastIndexOf('$$') === token.length-2) { token = token.slice(2, -2); isDisplay = true; }
+            else if (token.indexOf('\\[') === 0 && token.slice(-2) === '\\]') { token = token.slice(2, -2); isDisplay = true; }
+            else if (token.indexOf('\\(') === 0 && token.slice(-2) === '\\)') { token = token.slice(2, -2); isDisplay = false; }
+            else if (token.indexOf('$') === 0 && token.slice(-1) === '$') { token = token.slice(1, -1); isDisplay = false; }
+            token = token.trim();
+            var normalized = normalizeLatexForMathQuill(token);
+            var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
+            var repl = isDisplay ? '<div class="math-display">' + span + '</div>' : span;
+            html = html.split('@@UM_LATEX_' + tokens[i].id + '@@').join(repl);
+        }
+
         try {
             var id = detectEditorId();
             var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
