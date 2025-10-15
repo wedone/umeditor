@@ -222,6 +222,17 @@
             var id = detectEditorId();
             var ed = UM.getEditor(id) || UM.getEditor('myEditor');
             if(!ed) return alert('找不到编辑器实例');
+            // 如果输入看起来像 Markdown（以 #/```/-/数字列表 等开始），先把 Markdown 转为 HTML（保留数学片段），再插入
+            try{
+                if(looksLikeMarkdown(mixed)){
+                    var html = markdownToHtmlKeepingMath(mixed);
+                    var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
+                    if(!inst || !inst.ed) return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
+                    inst.ed.execCommand('inserthtml', html);
+                    return;
+                }
+            }catch(mdErr){ console.warn('markdown conversion failed, falling back to mixed injector', mdErr); }
+
             injectMixedContentToUM(ed, mixed);
         });
 
@@ -355,6 +366,70 @@
         // 将 \xlongequal{...}（长等号）替换为普通等号 '='
         s = s.replace(/\\xlongequal\{[^}]*\}/g, '=');
         return s;
+    }
+
+    // 简单判断输入是否像 Markdown：存在标题、代码块或列表的特征
+    function looksLikeMarkdown(text){
+        if(!text) return false;
+        var t = String(text).trim();
+        return (/^#{1,6}\s+/.test(t) || /```/.test(t) || /^\s*[-*+]\s+/m.test(t) || /^\s*\d+\.\s+/m.test(t));
+    }
+
+    // 极简 Markdown -> HTML 转换器（保留数学片段不被解析）
+    // 目标：把常见的 md 标题、段落、加粗、行内换行、无序/有序列表转换为 HTML，且把 math 保留为 mathquill 可识别的 span
+    function markdownToHtmlKeepingMath(md){
+        if(!md) return '';
+        var src = String(md);
+        // 先抽取 math 片段并替换为占位符
+        var mathBlocks = [];
+        var mathRe = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^\$]+\$)/g;
+        src = src.replace(mathRe, function(m){ mathBlocks.push(m); return '<<MATH_BLOCK_' + (mathBlocks.length-1) + '>>'; });
+
+        // 转换代码块 ``` -> <pre><code>
+        src = src.replace(/```([\s\S]*?)```/g, function(_, code){ return '<pre><code>' + escapeHtml(code) + '</code></pre>'; });
+
+        // 标题
+        src = src.replace(/^######\s*(.*)$/gm, '<h6>$1</h6>');
+        src = src.replace(/^#####\s*(.*)$/gm, '<h5>$1</h5>');
+        src = src.replace(/^####\s*(.*)$/gm, '<h4>$1</h4>');
+        src = src.replace(/^###\s*(.*)$/gm, '<h3>$1</h3>');
+        src = src.replace(/^##\s*(.*)$/gm, '<h2>$1</h2>');
+        src = src.replace(/^#\s*(.*)$/gm, '<h1>$1</h1>');
+
+        // 无序列表（简单实现）
+        src = src.replace(/(^|\n)(?:\s*[-*+]\s+.+)(?:\n(?:\s*[-*+]\s+.+))*/g, function(block){
+            var items = block.trim().split(/\n/).map(function(line){ return line.replace(/^\s*[-*+]\s+/, ''); });
+            return '\n<ul>\n' + items.map(function(i){ return '<li>' + i + '</li>'; }).join('\n') + '\n</ul>\n';
+        });
+
+        // 有序列表
+        src = src.replace(/(^|\n)(?:\s*\d+\.\s+.+)(?:\n(?:\s*\d+\.\s+.+))*/g, function(block){
+            var items = block.trim().split(/\n/).map(function(line){ return line.replace(/^\s*\d+\.\s+/, ''); });
+            return '\n<ol>\n' + items.map(function(i){ return '<li>' + i + '</li>'; }).join('\n') + '\n</ol>\n';
+        });
+
+        // 加粗 **text**
+        src = src.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+        // 换行处理：保持段内换行为 <br>
+        src = src.replace(/([^>])\n{2,}/g, '$1</p><p>');
+        // 包裹段落
+        src = '<p>' + src.replace(/\n/g, '<br>') + '</p>';
+
+        // 恢复 math 占位符，包成 mathquill span（先做 normalize 让内部 latex 兼容）
+        src = src.replace(/<<MATH_BLOCK_(\d+)>>/g, function(_, idx){
+            var m = mathBlocks[parseInt(idx,10)];
+            var latex = m;
+            if(m.indexOf('$$') === 0 && m.lastIndexOf('$$') === m.length-2){ latex = m.slice(2,-2); }
+            else if(m.indexOf('\\[') === 0 && m.slice(-2) === '\\]') { latex = m.slice(2,-2); }
+            else if(m.indexOf('\\(') === 0 && m.slice(-2) === '\\)') { latex = m.slice(2,-2); }
+            else if(m.indexOf('$') === 0 && m.slice(-1) === '$') { latex = m.slice(1,-1); }
+            latex = latex.trim();
+            var normalized = normalizeLatexForMathQuill(latex);
+            return '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
+        });
+
+        return src;
     }
 
     function injectMixedContentToUM(editor, mixedText) {
