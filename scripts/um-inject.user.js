@@ -436,7 +436,8 @@
                     if(inUl){ out.push('</ul>'); inUl=false; }
                     if(inOl){ out.push('</ol>'); inOl=false; }
                     var level = Math.min(6, m[1].length);
-                    out.push('<h'+level+'>' + inlineMarkdown(m[2]) + '</h'+level+'>');
+                    // 不使用 <hN>，改为加粗段落以兼容目标编辑器
+                    out.push('<p><strong>' + inlineMarkdown(m[2]) + '</strong></p>');
                     continue;
                 }
                 // unordered list
@@ -509,7 +510,7 @@
                 var line = lines[i];
                 var trimmed = line.replace(/^\s+|\s+$/g,'');
                 var mh = trimmed.match(/^(#{1,6})\s+(.*)$/);
-                if(mh){ if(inUl){ out.push('</ul>'); inUl=false; } if(inOl){ out.push('</ol>'); inOl=false; } var level = Math.min(6, mh[1].length); out.push('<h'+level+'>' + inlineMarkdown(mh[2]) + '</h'+level+'>'); continue; }
+                if(mh){ if(inUl){ out.push('</ul>'); inUl=false; } if(inOl){ out.push('</ol>'); inOl=false; } var level = Math.min(6, mh[1].length); out.push('<p><strong>' + inlineMarkdown(mh[2]) + '</strong></p>'); continue; }
                 if(/^[\-*+]\s+/.test(trimmed)){
                     if(!inUl){ out.push('<ul>'); inUl=true; }
                     out.push('<li>' + inlineMarkdown(trimmed.replace(/^[\-*+]\s+/,'')) + '</li>');
