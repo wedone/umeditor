@@ -222,17 +222,6 @@
             var id = detectEditorId();
             var ed = UM.getEditor(id) || UM.getEditor('myEditor');
             if(!ed) return alert('找不到编辑器实例');
-            // 如果输入看起来像 Markdown（以 #/```/-/数字列表 等开始），先把 Markdown 转为 HTML（保留数学片段），再插入
-            try{
-                if(looksLikeMarkdown(mixed)){
-                    var html = markdownToHtmlKeepingMath(mixed);
-                    var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
-                    if(!inst || !inst.ed) return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
-                    inst.ed.execCommand('inserthtml', html);
-                    return;
-                }
-            }catch(mdErr){ console.warn('markdown conversion failed, falling back to mixed injector', mdErr); }
-
             injectMixedContentToUM(ed, mixed);
         });
 
@@ -368,70 +357,6 @@
         return s;
     }
 
-    // 简单判断输入是否像 Markdown：存在标题、代码块或列表的特征
-    function looksLikeMarkdown(text){
-        if(!text) return false;
-        var t = String(text).trim();
-        return (/^#{1,6}\s+/.test(t) || /```/.test(t) || /^\s*[-*+]\s+/m.test(t) || /^\s*\d+\.\s+/m.test(t));
-    }
-
-    // 极简 Markdown -> HTML 转换器（保留数学片段不被解析）
-    // 目标：把常见的 md 标题、段落、加粗、行内换行、无序/有序列表转换为 HTML，且把 math 保留为 mathquill 可识别的 span
-    function markdownToHtmlKeepingMath(md){
-        if(!md) return '';
-        var src = String(md);
-        // 先抽取 math 片段并替换为占位符
-        var mathBlocks = [];
-        var mathRe = /(\$\$[\s\S]*?\$\$|\\\[[\s\S]*?\\\]|\\\([\s\S]*?\\\)|\$[^\$]+\$)/g;
-        src = src.replace(mathRe, function(m){ mathBlocks.push(m); return '<<MATH_BLOCK_' + (mathBlocks.length-1) + '>>'; });
-
-        // 转换代码块 ``` -> <pre><code>
-        src = src.replace(/```([\s\S]*?)```/g, function(_, code){ return '<pre><code>' + escapeHtml(code) + '</code></pre>'; });
-
-        // 标题
-        src = src.replace(/^######\s*(.*)$/gm, '<h6>$1</h6>');
-        src = src.replace(/^#####\s*(.*)$/gm, '<h5>$1</h5>');
-        src = src.replace(/^####\s*(.*)$/gm, '<h4>$1</h4>');
-        src = src.replace(/^###\s*(.*)$/gm, '<h3>$1</h3>');
-        src = src.replace(/^##\s*(.*)$/gm, '<h2>$1</h2>');
-        src = src.replace(/^#\s*(.*)$/gm, '<h1>$1</h1>');
-
-        // 无序列表（简单实现）
-        src = src.replace(/(^|\n)(?:\s*[-*+]\s+.+)(?:\n(?:\s*[-*+]\s+.+))*/g, function(block){
-            var items = block.trim().split(/\n/).map(function(line){ return line.replace(/^\s*[-*+]\s+/, ''); });
-            return '\n<ul>\n' + items.map(function(i){ return '<li>' + i + '</li>'; }).join('\n') + '\n</ul>\n';
-        });
-
-        // 有序列表
-        src = src.replace(/(^|\n)(?:\s*\d+\.\s+.+)(?:\n(?:\s*\d+\.\s+.+))*/g, function(block){
-            var items = block.trim().split(/\n/).map(function(line){ return line.replace(/^\s*\d+\.\s+/, ''); });
-            return '\n<ol>\n' + items.map(function(i){ return '<li>' + i + '</li>'; }).join('\n') + '\n</ol>\n';
-        });
-
-        // 加粗 **text**
-        src = src.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-
-        // 换行处理：保持段内换行为 <br>
-        src = src.replace(/([^>])\n{2,}/g, '$1</p><p>');
-        // 包裹段落
-        src = '<p>' + src.replace(/\n/g, '<br>') + '</p>';
-
-        // 恢复 math 占位符，包成 mathquill span（先做 normalize 让内部 latex 兼容）
-        src = src.replace(/<<MATH_BLOCK_(\d+)>>/g, function(_, idx){
-            var m = mathBlocks[parseInt(idx,10)];
-            var latex = m;
-            if(m.indexOf('$$') === 0 && m.lastIndexOf('$$') === m.length-2){ latex = m.slice(2,-2); }
-            else if(m.indexOf('\\[') === 0 && m.slice(-2) === '\\]') { latex = m.slice(2,-2); }
-            else if(m.indexOf('\\(') === 0 && m.slice(-2) === '\\)') { latex = m.slice(2,-2); }
-            else if(m.indexOf('$') === 0 && m.slice(-1) === '$') { latex = m.slice(1,-1); }
-            latex = latex.trim();
-            var normalized = normalizeLatexForMathQuill(latex);
-            return '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
-        });
-
-        return src;
-    }
-
     function injectMixedContentToUM(editor, mixedText) {
         if (!editor || !editor.execCommand) { console.error('editor not found or invalid'); return; }
         // 如果整个输入就是一个单独的公式 token（行内或显示），优先使用编辑器的公式命令插入。
@@ -493,7 +418,66 @@
             }
         }catch(e){ /* ignore and continue to fallback */ }
         function escapeHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-        function textToHtml(s) { if(!s) return ''; s = String(s).replace(/\r\n/g,'\n').replace(/\r/g,'\n'); var esc = escapeHtml(s); esc = esc.replace(/\n{2,}/g,'<br><br>'); esc = esc.replace(/\n/g,'<br>'); return esc; }
+        function textToHtml(s) { 
+            if(!s) return ''; 
+            s = String(s).replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+            // 轻量 Markdown -> HTML 转换（仅对文本片段生效，不影响 LaTeX 片段）
+            // 支持：# 标题, -/* 列表, 有序列表 1., **粗体**, *斜体*, `code`
+            var lines = s.split('\n');
+            var out = [];
+            var inUl = false, inOl = false;
+            for(var i=0;i<lines.length;i++){
+                var line = lines[i];
+                var trimmed = line.replace(/^\s+|\s+$/g,'');
+                // headings ### / ## / #
+                var m = trimmed.match(/^(#{1,6})\s+(.*)$/);
+                if(m){
+                    // close lists if open
+                    if(inUl){ out.push('</ul>'); inUl=false; }
+                    if(inOl){ out.push('</ol>'); inOl=false; }
+                    var level = Math.min(6, m[1].length);
+                    out.push('<h'+level+'>' + inlineMarkdown(m[2]) + '</h'+level+'>');
+                    continue;
+                }
+                // unordered list
+                if(/^[\-*+]\s+/.test(trimmed)){
+                    if(!inUl){ out.push('<ul>'); inUl=true; }
+                    out.push('<li>' + inlineMarkdown(trimmed.replace(/^[\-*+]\s+/,'')) + '</li>');
+                    continue;
+                }
+                // ordered list
+                var mo = trimmed.match(/^\d+\.\s+(.*)$/);
+                if(mo){
+                    if(!inOl){ out.push('<ol>'); inOl=true; }
+                    out.push('<li>' + inlineMarkdown(mo[1]) + '</li>');
+                    continue;
+                }
+                // blank line
+                if(trimmed === ''){
+                    if(inUl){ out.push('</ul>'); inUl=false; }
+                    if(inOl){ out.push('</ol>'); inOl=false; }
+                    out.push('<p></p>');
+                    continue;
+                }
+                // normal paragraph line
+                out.push('<p>' + inlineMarkdown(trimmed) + '</p>');
+            }
+            if(inUl) out.push('</ul>');
+            if(inOl) out.push('</ol>');
+            return out.join('');
+            
+            function inlineMarkdown(t){
+                // escape html first
+                t = escapeHtml(t);
+                // code `...`
+                t = t.replace(/`([^`]+?)`/g, function(_, c){ return '<code>' + escapeHtml(c) + '</code>'; });
+                // bold **...**
+                t = t.replace(/\*\*([^*]+?)\*\*/g, '<strong>$1</strong>');
+                // italic *...*
+                t = t.replace(/\*([^*]+?)\*/g, '<em>$1</em>');
+                return t;
+            }
+        }
         var re = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)/g;
         var lastIndex = 0; var m; var parts = [];
         while ((m = re.exec(mixedText)) !== null) {
