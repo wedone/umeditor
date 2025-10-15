@@ -320,6 +320,10 @@
         s = s.replace(/\\\{/g, '\\lbrace').replace(/\\\}/g, '\\rbrace');
         s = s.replace(/<<LEFTLBRACE>>/g, '\\left\\{').replace(/<<RIGHTRBRACE>>/g, '\\right\\}');
         s = s.replace(/\s{2,}/g, ' ');
+    // 将 \complement 映射为带花括号的 Unicode 补集符号 {∁}，以便下标/上标能正确绑定（例如 {∁}_{R} 或 {∁}^{R}）
+    // 注意：原先使用 \b 在遇到下划线 '_' 时无法匹配（因为 '_' 被视为单词字符），
+    // 所以这里使用前瞻保证在下划线/空白/花括号或行尾时仍能匹配到 \complement
+    s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
     // MathQuill 对 \mathbb 的支持是有限的，但项目中已有对常见集合的映射。
     // 之前为了稳定渲染把所有 \mathbb{...} 降级为 \mathrm{...}，
     // 这会导致像 "\\mathbb{Z}" 这样的常见符号被错误降级为普通体。
