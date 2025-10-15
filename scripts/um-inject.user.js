@@ -370,7 +370,40 @@
                 latex = latex.trim();
                 var normalizedWhole = normalizeLatexForMathQuill(latex);
                 try{
-                    // 优先调用官方命令，若成功返回
+                    // 首先尝试：如果编辑器实例位于同源窗口，并且该窗口暴露 MathQuill API，
+                    // 则使用 MathQuill 的 StaticMath/MathField 在目标窗口中渲染公式，然后把渲染好的 HTML 插入编辑器。
+                    // 这样能保证渲染行为与页面上 MathQuill 一致，也便于在不同版本中做兼容性测试。
+                    var inst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
+                    if(inst && inst.win){
+                        try{
+                            var cw = inst.win; // 目标编辑器所在的 window（可能是 iframe 的 contentWindow）
+                            var MQ = cw.MathQuill && typeof cw.MathQuill.getInterface === 'function' ? cw.MathQuill.getInterface(2) : null;
+                            if(MQ){
+                                // 在目标窗口中创建临时容器以让 StaticMath 正确计算布局
+                                var temp = cw.document.createElement('span');
+                                temp.className = 'mq-temp-for-insert';
+                                // 插到 body，随后移除
+                                cw.document.body.appendChild(temp);
+                                var staticMath = MQ.StaticMath(temp);
+                                // 如果是 display 模式，可考虑包裹为 div 并设置样式，暂以 inline 为主
+                                staticMath.latex(normalizedWhole);
+                                // 获取渲染后的 outerHTML（在目标文档上下文中），并清理临时节点
+                                var outer = temp.outerHTML;
+                                temp.parentNode && temp.parentNode.removeChild(temp);
+                                // 将渲染好的 HTML 插入到编辑器（使用编辑器的 inserthtml 接口）
+                                var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
+                                if(targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function'){
+                                    targetInst.ed.execCommand('inserthtml', outer);
+                                    return;
+                                }
+                            }
+                        }catch(innerErr){
+                            // 可能是跨域或目标窗口中没有 MathQuill，可继续回退
+                            console.warn('MathQuill API render failed or unavailable in target window', innerErr);
+                        }
+                    }
+
+                    // 回退：尝试调用 UMEditor 的公式命令，若成功返回
                     if(typeof editor.execCommand === 'function'){
                         editor.execCommand('formula', normalizedWhole);
                         return;
