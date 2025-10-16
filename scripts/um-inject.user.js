@@ -316,33 +316,8 @@
     function normalizeLatexForMathQuill(latex){
         if(!latex) return latex;
         var s = String(latex);
-        // 预定义单字符 mathbb 映射（提前应用以覆盖后续替换导致的匹配失败）
-        var mathbbMap = {
-            'N': '\u2115', // ℕ
-            'Z': '\u2124', // ℤ
-            'Q': '\u211A', // ℚ
-            'R': '\u211D', // ℝ
-            'C': '\u2102', // ℂ
-            'H': '\u210D', // ℍ
-            'P': '\u2119'  // ℙ
-        };
-        // 提取为 helper，统一处理多种可能的变体（普通大括号、转义的大括号、\left\{...\right\}、以及已经被替换为 \lbrace/\rbrace 的情况）
-        function applyMathbbMap(str){
-            if(!str) return str;
-            return String(str)
-                // 最常见的形式：\mathbb{X}
-                .replace(/\\mathbb\s*\{([A-Za-z])\}/g, function(_, ch){ return mathbbMap.hasOwnProperty(ch) ? mathbbMap[ch] : ('\\mathbb{' + ch + '}'); })
-                // 有时写成不带空格的 \mathbb{X}
-                .replace(/\\mathbb\{([A-Za-z])\}/g, function(_, ch){ return mathbbMap.hasOwnProperty(ch) ? mathbbMap[ch] : ('\\mathbb{' + ch + '}'); })
-                // 转义的大括号形式： \\{ X \\}
-                .replace(/\\mathbb\s*\\\\\{\s*([A-Za-z])\s*\\\\\}/g, function(_, ch){ return mathbbMap.hasOwnProperty(ch) ? mathbbMap[ch] : ('\\mathbb{' + ch + '}'); })
-                // \mathbb\left\{X\right\}
-                .replace(/\\mathbb\s*\\left\\\{\s*([A-Za-z])\s*\\right\\\}/g, function(_, ch){ return mathbbMap.hasOwnProperty(ch) ? mathbbMap[ch] : ('\\mathbb{' + ch + '}'); })
-                // 已被替换为 \lbrace / \rbrace 的情况
-                .replace(/\\mathbb\s*\\lbrace\s*([A-Za-z])\s*\\rbrace/g, function(_, ch){ return mathbbMap.hasOwnProperty(ch) ? mathbbMap[ch] : ('\\mathbb{' + ch + '}'); });
-        }
-        // 先做一次替换，避免后续对大括号的改写干扰匹配
-        s = applyMathbbMap(s);
+        // mathbb 映射逻辑已移除：新版 MathQuill 支持 \R / \N 的单字母输入形式，
+        // 因此不再进行手动降级/替换。保留后续对大括号、|、\complement 等的处理。
         s = s.replace(/\\\{\s*([^{}]+?)\s*\\\}/g, function(_, inner){ return '\\left\\{' + inner + '\\right\\}'; });
         s = s.replace(/\\left\\\{/g, '<<LEFTLBRACE>>').replace(/\\right\\\}/g, '<<RIGHTRBRACE>>');
         s = s.replace(/\|/g, '\\mid');
