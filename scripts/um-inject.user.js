@@ -146,36 +146,65 @@
     panel.style.overflow = 'hidden';
         
         // 改为包含混合输入与按钮（带头部样式）
-        panel.innerHTML = '\
-            <div id="um-inject-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:linear-gradient(90deg,#b65a00,#9b3a00);color:#fff;">\
-                <div style="display:flex;align-items:center;gap:10px">\
-                    <div id="um-inject-badge" style="width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">🍊</div>\
-                    <strong style="font-size:14px;letter-spacing:0.2px">橙果错题助手</strong>\
-                </div>\
-                <button id="um-inject-close" aria-label="关闭面板" style="background:transparent;border:none;color:rgba(255,255,255,0.9);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:6px">✕</button>\
-            </div>\
-            <div style="padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,250,252,0.98));">\
-                <div>\
-                    <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">文本+LaTeX混合（支持 $...$ / $$...$$ / \\(...\\) / \\[...\\]）</label>\
-                    <textarea id="um-inject-mixed" style="width:100%;height:180px;border:1px solid rgba(0,0,0,0.06);padding:8px;border-radius:6px;resize:vertical;font-family:Menlo,Consolas,monospace;font-size:13px"></textarea>\
-                </div>\
-                <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px">\
-                    <div style="display:flex;align-items:center">\
-                        <button id="um-clear-editor" aria-label="清空编辑器" style="background:#ff4d4f;color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">清空编辑器</button>\
-                        <span id="um-clear-confirm" style="display:none;opacity:0;margin-left:8px;padding:6px;border-radius:6px;background:#fff;border:1px solid #eee;box-shadow:0 6px 12px rgba(0,0,0,0.06);font-size:12px;align-items:center;transition:opacity 180ms ease;">\
-                            <span style="margin-right:8px;color:#333">确定清空？</span>\
-                            <button id="um-clear-confirm-yes" aria-label="确认清空" style="background:#ff4d4f;color:#fff;border:none;padding:6px 10px;border-radius:6px;margin-right:6px;cursor:pointer">确认</button>\
-                            <button id="um-clear-confirm-no" aria-label="取消清空" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer">取消</button>\
-                        </span>\
-                    </div>\
-                    <div style="display:flex;gap:8px">\
-                        <button id="um-insert-content" aria-label="插入文本" style="background:linear-gradient(180deg,#f3f4f6,#eef1f6);border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:6px;cursor:pointer">插入文本</button>\
-                        <button id="um-insert-mixed" aria-label="插入混合内容" style="background:linear-gradient(180deg,#b65a00,#9b3a00);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">插入混合内容</button>\
-                    </div>\
-                </div>\
-            </div>';
-
+        panel.innerHTML = `
+            <div id="um-inject-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:linear-gradient(90deg,#b65a00,#9b3a00);color:#fff;">
+                <div style="display:flex;align-items:center;gap:10px">
+                    <div id="um-inject-badge" style="width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">🍊</div>
+                    <strong style="font-size:14px;letter-spacing:0.2px">橙果错题助手</strong>
+                </div>
+                <button id="um-inject-close" aria-label="关闭面板" style="background:transparent;border:none;color:rgba(255,255,255,0.9);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:6px">✕</button>
+            </div>
+            <div style="padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,250,252,0.98));">
+                <div>
+                    <div style="display:flex;align-items:center;justify-content:space-between;">
+                        <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">文本+LaTeX混合（支持 $...$ / $$...$$ / \(...\) / \[...\]）</label>
+                        <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#333;margin-left:6px">
+                            <input id="um-enable-markdown" type="checkbox" checked style="width:14px;height:14px;vertical-align:middle">
+                            <span style="font-size:13px">支持 MarkDown</span>
+                        </label>
+                    </div>
+                    <textarea id="um-inject-mixed" style="width:100%;height:180px;border:1px solid rgba(0,0,0,0.06);padding:8px;border-radius:6px;resize:vertical;font-family:Menlo,Consolas,monospace;font-size:13px"></textarea>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px">
+                    <div style="display:flex;align-items:center">
+                        <button id="um-clear-editor" aria-label="清空编辑器" style="background:#ff4d4f;color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">清空编辑器</button>
+                        <span id="um-clear-confirm" style="display:none;opacity:0;margin-left:8px;padding:6px;border-radius:6px;background:#fff;border:1px solid #eee;box-shadow:0 6px 12px rgba(0,0,0,0.06);font-size:12px;align-items:center;transition:opacity 180ms ease;">
+                            <span style="margin-right:8px;color:#333">确定清空？</span>
+                            <button id="um-clear-confirm-yes" aria-label="确认清空" style="background:#ff4d4f;color:#fff;border:none;padding:6px 10px;border-radius:6px;margin-right:6px;cursor:pointer">确认</button>
+                            <button id="um-clear-confirm-no" aria-label="取消清空" style="padding:6px 10px;border-radius:6px;border:1px solid #ddd;background:#fff;cursor:pointer">取消</button>
+                        </span>
+                    </div>
+                    <div style="display:flex;gap:8px;align-items:center">
+                        <button id="um-insert-content" aria-label="插入文本" style="background:linear-gradient(180deg,#f3f4f6,#eef1f6);border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:6px;cursor:pointer">插入文本</button>
+                        <button id="um-paste-content" aria-label="从剪贴板粘贴" style="background:linear-gradient(180deg,#fff8e6,#fff1d6);border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:6px;cursor:pointer;margin-left:6px">粘贴</button>
+                        <button id="um-insert-mixed" aria-label="插入混合内容" style="background:linear-gradient(180deg,#b65a00,#9b3a00);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">插入混合内容</button>
+                    </div>
+                </div>
+            </div>`;
         document.body.appendChild(panel);
+
+        // 绑定粘贴按钮：先清空输入框，再尝试从剪贴板读取文本并插入到光标处
+        try{
+            var pasteBtn = document.getElementById('um-paste-content');
+            if(pasteBtn){
+                pasteBtn.addEventListener('click', function(){
+                    var ta = document.getElementById('um-inject-mixed');
+                    if(!ta) return alert('找不到输入框');
+                    try{ ta.value = ''; }catch(e){}
+                    if(navigator.clipboard && typeof navigator.clipboard.readText === 'function'){
+                        navigator.clipboard.readText().then(function(text){
+                            // 插入到光标处或追加
+                            try{ insertAtCursor(ta, text); }catch(e){ ta.value = text; }
+                        }).catch(function(err){
+                            console.warn('clipboard.readText failed', err);
+                            try{ ta.value = window.prompt('无法直接读取剪贴板，请粘贴到此处并回车：') || ''; }catch(e){ ta.value = ''; }
+                        });
+                    } else {
+                        try{ ta.value = window.prompt('无法直接读取剪贴板，请粘贴到此处并回车：') || ''; }catch(e){ ta.value = ''; }
+                    }
+                });
+            }
+        }catch(e){ console.warn('attach paste handler failed', e); }
 
         // 使用 THEME 统一面板中关键元素的颜色（避免大量内联字符串替换）
         try{
