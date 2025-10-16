@@ -460,7 +460,7 @@
         var enableMd = true;
         try{ var cb = document.getElementById('um-enable-markdown'); enableMd = !!(cb && cb.checked); }catch(e){ enableMd = true; }
 
-        var html = '';
+    var html = '';
         if(enableMd){
             // 优先使用已存在的 marked，否则尝试动态加载；加载失败回退到简单转换
             var mdParser = window.marked || null;
@@ -485,6 +485,11 @@
             tmp = tmp.replace(/\n/g, '<br>');
             html = tmp;
         }
+
+        // 将任何 <h1>-<h6> 替换为 <p><strong>...</strong></p>，因为目标编辑器不支持 hN 标签
+        try{
+            html = html.replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, function(_, inner){ return '<p><strong>' + inner + '</strong></p>'; });
+        }catch(e){ /* ignore */ }
 
         // 把占位符替换为公式 HTML
         for(var i=0;i<tokens.length;i++){
