@@ -318,7 +318,12 @@
         var s = String(latex);
         // mathbb 映射逻辑已移除：新版 MathQuill 支持 \R / \N 的单字母输入形式，
         // 因此不再进行手动降级/替换。保留后续对大括号、|、\complement 等的处理。
-        s = s.replace(/\\\{\s*([^{}]+?)\s*\\\}/g, function(_, inner){ return '\\left\\{' + inner + '\\right\\}'; });
+            // 为了兼容 AI 输出中常见的 "\\mathbb{X}" 形式（例如 "\\mathbb{R}"），
+            // 这里对单个字母的情形做预处理：将 "\\mathbb{X}" 转为 "\\X"，
+            // 仅针对单字母进行替换，避免误改如 "\\mathbb{ABC}" 或更复杂的宏。
+            s = s.replace(/\\mathbb\{\s*([A-Za-z])\s*\}/g, function(_, ch){ return '\\' + ch; });
+
+            s = s.replace(/\\\{\s*([^{}]+?)\s*\\\}/g, function(_, inner){ return '\\left\\{' + inner + '\\right\\}'; });
         s = s.replace(/\\left\\\{/g, '<<LEFTLBRACE>>').replace(/\\right\\\}/g, '<<RIGHTRBRACE>>');
         s = s.replace(/\|/g, '\\mid');
         s = s.replace(/\\\{/g, '\\lbrace').replace(/\\\}/g, '\\rbrace');
