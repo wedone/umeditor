@@ -316,30 +316,19 @@
     function normalizeLatexForMathQuill(latex){
         if(!latex) return latex;
         var s = String(latex);
-        // mathbb 映射逻辑已移除：新版 MathQuill 支持 \R / \N 的单字母输入形式，
-        // 因此不再进行手动降级/替换。保留后续对大括号、|、\complement 等的处理。
-            // 为了兼容 AI 输出中常见的 "\\mathbb{X}" 形式（例如 "\\mathbb{R}"），
-            // 这里对单个字母的情形做预处理：将 "\\mathbb{X}" 转为 "\\X"，
-            // 仅针对单字母进行替换，避免误改如 "\\mathbb{ABC}" 或更复杂的宏。
-            s = s.replace(/\\mathbb\{\s*([A-Za-z])\s*\}/g, function(_, ch){ return '\\' + ch; });
-
-            s = s.replace(/\\\{\s*([^{}]+?)\s*\\\}/g, function(_, inner){ return '\\left\\{' + inner + '\\right\\}'; });
-        s = s.replace(/\\left\\\{/g, '<<LEFTLBRACE>>').replace(/\\right\\\}/g, '<<RIGHTRBRACE>>');
-        s = s.replace(/\|/g, '\\mid');
-        s = s.replace(/\\\{/g, '\\lbrace').replace(/\\\}/g, '\\rbrace');
-        s = s.replace(/<<LEFTLBRACE>>/g, '\\left\\{').replace(/<<RIGHTRBRACE>>/g, '\\right\\}');
-        s = s.replace(/\s{2,}/g, ' ');
+    // 避免在某些环境下使用 \left/\right 导致空白渲染的问题
+        s = s.replace(/\\\{/g, '\\left\\{').replace(/\\\}/g, '\\right\\}');
+    // 为了兼容 AI 输出中常见的 "\\mathbb{X}" 形式（例如 "\\mathbb{R}"），
+    // 这里对单个字母的情形做预处理：将 "\\mathbb{X}" 转为 "\\X"，
+    // 仅针对单字母进行替换，避免误改如 "\\mathbb{ABC}" 或更复杂的宏。
+        s = s.replace(/\\mathbb\{\s*([A-Za-z])\s*\}/g, function(_, ch){ return '\\' + ch; });
     // 将 \complement 映射为带花括号的 Unicode 补集符号 {∁}，以便下标/上标能正确绑定（例如 {∁}_{R} 或 {∁}^{R}）
     // 注意：原先使用 \b 在遇到下划线 '_' 时无法匹配（因为 '_' 被视为单词字符），
     // 所以这里使用前瞻保证在下划线/空白/花括号或行尾时仍能匹配到 \complement
-    s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
-    // MathQuill 对 \mathbb 的支持是有限的，但项目中已有对常见集合的映射。
-    // 之前为了稳定渲染把所有 \mathbb{...} 降级为 \mathrm{...}，
-    // 这会导致像 "\\mathbb{Z}" 这样的常见符号被错误降级为普通体。
-    // 先注释掉全局降级，保留这段作为说明，方便后续回退或做更细粒度的降级：
-    // s = s.replace(/\\mathbb\{([^}]+?)\}/g, function(_, inner){ return '\\mathrm{' + inner + '}'; });
-        // （之前在这里做第二次替换以保证在其它替换之后仍能命中）
-        // 对于多数情况上面的 applyMathbbMap 已足够覆盖常见变体，保留这条注释以说明设计初衷。
+        s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
+        s = s.replace(/\|/g, '\\mid');
+        s = s.replace(/\s{2,}/g, ' ');
+
         // 处理 mhchem 的 \ce{...}：支持嵌套大括号的解析，保留内部内容并用大括号包裹以保留分组
         s = (function(str){
             var out = '';
@@ -361,8 +350,6 @@
             }
             return out;
         })(s);
-        // 将 \xlongequal{...}（长等号）替换为普通等号 '='
-        s = s.replace(/\\xlongequal\{[^}]*\}/g, '=');
         return s;
     }
 
