@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.14.00003
+// @version      2025.10.14.00004
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  http://127.0.0.1:8000/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -14,138 +14,259 @@
 (function(){
     'use strict';
 
-    // 主题颜色配置（基于 橙果 色 #ff6000）
+    // ========================================
+    // 配置模块
+    // ========================================
+    
+    /**
+     * 主题颜色配置（基于橙果色 #ff6000 的暗色调整）
+     */
     var THEME = {
-        // 更暗的主题色，降低明度以减少刺眼感
-        primary: '#9b3a00',    // 更沉稳的深橙
-        primaryLight: '#b65a00',
-        // shadow / focus 使用更深色的 rgba
-        shadow: 'rgba(155,58,0,0.22)',
-        focus: 'rgba(155,58,0,0.14)'
+        primary: '#9b3a00',        // 主色：深橙色
+        primaryLight: '#b65a00',   // 浅主色：用于渐变
+        shadow: 'rgba(155,58,0,0.22)',  // 阴影色
+        focus: 'rgba(155,58,0,0.14)'    // 聚焦色
     };
 
-    // 更鲁棒地检测编辑器 id：在实际目标站点上会有多种占位形式
-    // - 先收集几类常见占位元素（script[type="text/plain"], textarea, div, contenteditable 等）
-    // - 过滤掉面板本身的 DOM
-    // - 优先尝试用 getEditorInstanceById 验证该 id 是否能取到可用的 UM 实例
-    // - 如果都没找到可验证的实例，回退到首个候选 id 或 'myEditor'
+    // ========================================
+    // 工具函数模块
+    // ========================================
+
+    /**
+     * 检测页面中可用的编辑器 ID
+     * 策略：
+     * 1. 收集常见占位元素（script[type="text/plain"], textarea, div 等）
+     * 2. 过滤掉面板本身的 DOM
+     * 3. 优先验证能否通过 getEditorInstanceById 获取可用实例
+     * 4. 回退到首个候选 ID 或 'myEditor'
+     * 
+     * @returns {string} 编辑器 ID
+     */
     function detectEditorId(){
         var panel = document.getElementById('um-inject-panel');
-        function insidePanel(node){ try{ return !!(panel && node && node.closest && node.closest('#um-inject-panel')); }catch(e){ return false; } }
+        
+        /**
+         * 判断节点是否在面板内部
+         * @param {HTMLElement} node 
+         * @returns {boolean}
+         */
+        function insidePanel(node){
+            try{
+                return !!(panel && node && node.closest && node.closest('#um-inject-panel'));
+            }catch(e){
+                return false;
+            }
+        }
 
         var seen = {};
         var candidates = [];
 
-        // helper to push candidate id if valid and not from panel
-        function pushId(id){ if(!id) return; if(seen[id]) return; seen[id]=true; candidates.push(id); }
+        /**
+         * 添加候选 ID（去重且排除面板内元素）
+         * @param {string} id 
+         */
+        function pushId(id){
+            if(!id || seen[id]) return;
+            seen[id] = true;
+            candidates.push(id);
+        }
 
-        // 1) 常见占位元素（有 id 的）
+        // 1) 常见占位元素（script[type="text/plain"], textarea, div, contenteditable）
         var elems = document.querySelectorAll('script[type="text/plain"], textarea, div, [contenteditable="true"]');
-        Array.prototype.forEach.call(elems, function(node){ if(insidePanel(node)) return; if(node.id) pushId(node.id); if(node.getAttribute && node.getAttribute('name')) pushId(node.getAttribute('name')); });
+        Array.prototype.forEach.call(elems, function(node){
+            if(insidePanel(node)) return;
+            if(node.id) pushId(node.id);
+            if(node.getAttribute && node.getAttribute('name')) pushId(node.getAttribute('name'));
+        });
 
-        // 2) edui / ueditor / umeditor 等 class/id 命名的元素
+        // 2) 具有编辑器特征的 class/id 命名元素
         var hintRegex = /(?:um|ue|editor|edui|ueditor|cgeditor|cgEditor|content|question|answer)/i;
         var allWithId = document.querySelectorAll('[id]');
-        Array.prototype.forEach.call(allWithId, function(node){ if(insidePanel(node)) return; var id = node.id; if(!id) return; if(hintRegex.test(id) || hintRegex.test(node.className || '') || hintRegex.test(node.getAttribute('name')||'')) pushId(id); });
+        Array.prototype.forEach.call(allWithId, function(node){
+            if(insidePanel(node)) return;
+            var id = node.id;
+            if(!id) return;
+            if(hintRegex.test(id) || hintRegex.test(node.className || '') || hintRegex.test(node.getAttribute('name')||'')){
+                pushId(id);
+            }
+        });
 
-        // 3) data-editor-id 或其它显式标识
+        // 3) 显式标识 data-editor-id
         var dataNodes = document.querySelectorAll('[data-editor-id]');
-        Array.prototype.forEach.call(dataNodes, function(n){ if(insidePanel(n)) return; if(n.id) pushId(n.id); var v = n.getAttribute('data-editor-id'); if(v) pushId(v); });
+        Array.prototype.forEach.call(dataNodes, function(n){
+            if(insidePanel(n)) return;
+            if(n.id) pushId(n.id);
+            var v = n.getAttribute('data-editor-id');
+            if(v) pushId(v);
+        });
 
-        // 4) 最后再尝试一些通用回退：第一个非面板的 script[type=text/plain] 或 textarea
-        var fallback = Array.prototype.slice.call(document.querySelectorAll('script[type="text/plain"], textarea, div.edui-editor-container, .edui-editor')).filter(function(node){ return !insidePanel(node); })[0];
+        // 4) 回退：首个非面板的 script/textarea/容器
+        var fallback = Array.prototype.slice.call(
+            document.querySelectorAll('script[type="text/plain"], textarea, div.edui-editor-container, .edui-editor')
+        ).filter(function(node){ return !insidePanel(node); })[0];
         if(fallback && fallback.id) pushId(fallback.id);
 
-        // 尝试逐个 candidate，用 getEditorInstanceById 验证可访问性（跨 iframe 支持）
-        for(var i=0;i<candidates.length;i++){
+        // 逐个验证候选 ID 是否能获取可用的编辑器实例
+        for(var i=0; i<candidates.length; i++){
             try{
                 var id = candidates[i];
                 var inst = getEditorInstanceById(id);
-                if(inst && inst.ed) {
-                    console.log('detectEditorId -> verified accessible editor id=', id, ' at ', inst.where, inst.src||'');
+                if(inst && inst.ed){
+                    console.log('detectEditorId -> verified accessible editor id=', id, 'at', inst.where, inst.src||'');
                     return id;
                 }
-            }catch(e){ /* ignore and continue */ }
+            }catch(e){
+                // 忽略并继续
+            }
         }
 
-        // 如果没有可验证的实例，仍返回第一个候选 id（可能页面上会在稍后初始化 UM）
-        if(candidates.length>0) return candidates[0];
-        // 最终回退
-        return 'myEditor';
+        // 如果没有可验证的实例，返回首个候选或默认值
+        return candidates.length > 0 ? candidates[0] : 'myEditor';
     }
 
+    /**
+     * 等待 UM 编辑器库加载完成
+     * @param {Function} cb 回调函数
+     */
     function waitForUM(cb){
-        var t = setInterval(function(){
+        var timer = setInterval(function(){
             if(window.UM && typeof UM.getEditor === 'function'){
-                clearInterval(t); cb();
+                clearInterval(timer);
+                cb();
             }
         }, 200);
-        setTimeout(function(){ clearInterval(t); }, 15000);
+        // 15 秒超时
+        setTimeout(function(){ clearInterval(timer); }, 15000);
     }
 
-    // 尝试根据 editor id 在当前 window 或同源 iframes 中获取 UM editor 实例
+    /**
+     * 根据 ID 在当前 window 或同源 iframe 中获取 UM 编辑器实例
+     * 支持跨 iframe 查找（同源限制）
+     * 
+     * @param {string} id 编辑器 ID
+     * @returns {Object|null} {ed: 编辑器实例, win: 所在 window, where: 'top'|'iframe', src: iframe源}
+     */
     function getEditorInstanceById(id){
+        // 优先在当前 window 中查找
         try{
             if(window.UM && typeof window.UM.getEditor === 'function'){
                 var ed = window.UM.getEditor(id);
                 if(ed) return {ed: ed, win: window, where: 'top'};
             }
-        }catch(e){ /* ignore */ }
-        // 搜索同源 iframe
+        }catch(e){
+            // 忽略错误
+        }
+
+        // 在同源 iframe 中查找
         var iframes = document.getElementsByTagName('iframe');
-        for(var i=0;i<iframes.length;i++){
+        for(var i=0; i<iframes.length; i++){
             var fr = iframes[i];
             try{
                 var cw = fr.contentWindow;
                 if(!cw) continue;
                 if(cw.UM && typeof cw.UM.getEditor === 'function'){
                     var ed2 = cw.UM.getEditor(id);
-                    if(ed2) return {ed: ed2, win: cw, where: 'iframe', src: fr.src||fr.getAttribute('data-src')||fr.id||''};
+                    if(ed2){
+                        return {
+                            ed: ed2,
+                            win: cw,
+                            where: 'iframe',
+                            src: fr.src || fr.getAttribute('data-src') || fr.id || ''
+                        };
+                    }
                 }
             }catch(e){
-                // 可能跨域访问被拒绝，跳过
-                // console.log('iframe access denied', e);
+                // 跨域访问被拒绝，跳过
             }
         }
         return null;
     }
 
-    // 创建浮动面板
+    /**
+     * 处理粘贴到 textarea 的逻辑（先清空，再从剪贴板读取）
+     * @param {HTMLTextAreaElement} textarea 目标文本框
+     */
+    function handlePasteToTextarea(textarea){
+        if(!textarea) return alert('找不到输入框');
+        
+        // 清空输入框
+        try{ textarea.value = ''; }catch(e){}
+
+        // 尝试从剪贴板读取
+        if(navigator.clipboard && typeof navigator.clipboard.readText === 'function'){
+            navigator.clipboard.readText().then(function(text){
+                try{
+                    // 尝试插入到光标位置（需要 insertAtCursor 函数，如不存在则直接赋值）
+                    if(typeof insertAtCursor === 'function'){
+                        insertAtCursor(textarea, text);
+                    }else{
+                        textarea.value = text;
+                    }
+                }catch(e){
+                    textarea.value = text;
+                }
+            }).catch(function(err){
+                console.warn('clipboard.readText failed', err);
+                // 回退到 prompt
+                try{
+                    textarea.value = window.prompt('无法直接读取剪贴板，请粘贴到此处并回车：') || '';
+                }catch(e){
+                    textarea.value = '';
+                }
+            });
+        }else{
+            // 浏览器不支持 clipboard API，使用 prompt
+            try{
+                textarea.value = window.prompt('无法直接读取剪贴板，请粘贴到此处并回车：') || '';
+            }catch(e){
+                textarea.value = '';
+            }
+        }
+    }
+
+    // ========================================
+    // UI 模块
+    // ========================================
+
+    /**
+     * 创建浮动面板 DOM 结构
+     * 面板包含混合输入框、Markdown 开关、插入/粘贴/清空按钮
+     */
     function createPanel(){
         if(document.getElementById('um-inject-panel')) return;
+
         var panel = document.createElement('div');
         panel.id = 'um-inject-panel';
         panel.style.position = 'fixed';
-        // 如果悬浮标存在，把面板放在悬浮标的上方并略微左移；否则使用默认右下角位置
+        panel.style.width = '480px';
+        panel.style.zIndex = 999999;
+        panel.style.background = 'rgba(255,255,255,0.98)';
+        panel.style.border = '1px solid rgba(0,0,0,0.08)';
+        panel.style.padding = '0';
+        panel.style.boxShadow = '0 10px 30px rgba(12,30,80,0.12)';
+        panel.style.fontFamily = 'Helvetica, Arial, sans-serif';
+        panel.style.borderRadius = '10px';
+        panel.style.overflow = 'hidden';
+
+        // 如果悬浮标存在，将面板定位在其上方
         var handle = document.getElementById('um-inject-handle');
-        if (handle) {
-            try {
+        if(handle){
+            try{
                 var hr = handle.getBoundingClientRect();
-                // 让面板的右侧与悬浮标的右侧精确对齐（去掉额外偏移）
                 var rightPx = Math.max(8, Math.round(window.innerWidth - hr.right));
-                // 计算面板底部：基于 handle.top 的位置并稍微增加垂直间距，使整体更靠下
                 var bottomPx = Math.max(12, Math.round((window.innerHeight - hr.top) + 10));
                 panel.style.right = rightPx + 'px';
                 panel.style.bottom = bottomPx + 'px';
-            } catch (e) {
+            }catch(e){
                 panel.style.right = '20px';
                 panel.style.bottom = '20px';
             }
-        } else {
+        }else{
             panel.style.right = '20px';
             panel.style.bottom = '20px';
         }
-    panel.style.width = '480px';
-    panel.style.zIndex = 999999;
-    panel.style.background = 'rgba(255,255,255,0.98)';
-    panel.style.border = '1px solid rgba(0,0,0,0.08)';
-    panel.style.padding = '0';
-    panel.style.boxShadow = '0 10px 30px rgba(12,30,80,0.12)';
-    panel.style.fontFamily = 'Helvetica, Arial, sans-serif';
-    panel.style.borderRadius = '10px';
-    panel.style.overflow = 'hidden';
-        
-        // 改为包含混合输入与按钮（带头部样式）
+
+        // 面板 HTML 结构
         panel.innerHTML = `
             <div id="um-inject-header" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:linear-gradient(90deg,#b65a00,#9b3a00);color:#fff;">
                 <div style="display:flex;align-items:center;gap:10px">
@@ -157,7 +278,7 @@
             <div style="padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,250,252,0.98));">
                 <div>
                     <div style="display:flex;align-items:center;justify-content:space-between;">
-                        <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">文本+LaTeX混合（支持 $...$ / $$...$$ / \(...\) / \[...\]）</label>
+                        <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">文本+LaTeX混合（支持 $...$ / $$...$$ / \\(...\\) / \\[...\\]）</label>
                         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#333;margin-left:6px">
                             <input id="um-enable-markdown" type="checkbox" checked style="width:14px;height:14px;vertical-align:middle">
                             <span style="font-size:13px">支持 MarkDown</span>
@@ -175,393 +296,275 @@
                         </span>
                     </div>
                     <div style="display:flex;gap:8px;align-items:center">
-                        <button id="um-insert-content" aria-label="插入文本" style="background:linear-gradient(180deg,#f3f4f6,#eef1f6);border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:6px;cursor:pointer">插入文本</button>
-                        <button id="um-paste-content" aria-label="从剪贴板粘贴" style="background:linear-gradient(180deg,#fff8e6,#fff1d6);border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:6px;cursor:pointer;margin-left:6px">粘贴</button>
+                        <button id="um-paste-content" aria-label="从剪贴板粘贴" style="background:linear-gradient(180deg,#fff8e6,#fff1d6);border:1px solid rgba(0,0,0,0.06);padding:8px 10px;border-radius:6px;cursor:pointer">粘贴</button>
                         <button id="um-insert-mixed" aria-label="插入混合内容" style="background:linear-gradient(180deg,#b65a00,#9b3a00);color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">插入混合内容</button>
                     </div>
                 </div>
             </div>`;
+
         document.body.appendChild(panel);
 
-        // 绑定粘贴按钮：先清空输入框，再尝试从剪贴板读取文本并插入到光标处
-        try{
-            var pasteBtn = document.getElementById('um-paste-content');
-            if(pasteBtn){
-                pasteBtn.addEventListener('click', function(){
-                    var ta = document.getElementById('um-inject-mixed');
-                    if(!ta) return alert('找不到输入框');
-                    try{ ta.value = ''; }catch(e){}
-                    if(navigator.clipboard && typeof navigator.clipboard.readText === 'function'){
-                        navigator.clipboard.readText().then(function(text){
-                            // 插入到光标处或追加
-                            try{ insertAtCursor(ta, text); }catch(e){ ta.value = text; }
-                        }).catch(function(err){
-                            console.warn('clipboard.readText failed', err);
-                            try{ ta.value = window.prompt('无法直接读取剪贴板，请粘贴到此处并回车：') || ''; }catch(e){ ta.value = ''; }
-                        });
-                    } else {
-                        try{ ta.value = window.prompt('无法直接读取剪贴板，请粘贴到此处并回车：') || ''; }catch(e){ ta.value = ''; }
-                    }
-                });
-            }
-        }catch(e){ console.warn('attach paste handler failed', e); }
+        // 应用主题颜色
+        applyThemeToPanel();
+        
+        // 注入全局样式（border-box 修正）
+        injectPanelStyles();
+        
+        // 绑定事件
+        bindPanelEvents();
+    }
 
-        // 使用 THEME 统一面板中关键元素的颜色（避免大量内联字符串替换）
+    /**
+     * 应用主题颜色到面板关键元素
+     */
+    function applyThemeToPanel(){
         try{
             var hdr = document.getElementById('um-inject-header');
             if(hdr) hdr.style.background = 'linear-gradient(90deg,'+THEME.primaryLight+','+THEME.primary+')';
+            
             var insertBtn = document.getElementById('um-insert-mixed');
             if(insertBtn) insertBtn.style.background = 'linear-gradient(180deg,'+THEME.primaryLight+','+THEME.primary+')';
+            
             var clearBtn = document.getElementById('um-clear-editor');
             if(clearBtn) clearBtn.style.background = THEME.primary;
+            
             var clearYes = document.getElementById('um-clear-confirm-yes');
             if(clearYes) clearYes.style.background = THEME.primary;
-        }catch(e){/* ignore styling errors */}
+        }catch(e){
+            // 忽略样式错误
+        }
+    }
 
-        // 强制面板内元素使用 border-box，避免 width:100% + padding 导致溢出
-        (function(){
-            try{
-                var style = document.createElement('style');
-                style.type = 'text/css';
-                style.appendChild(document.createTextNode('\n#um-inject-panel, #um-inject-panel * { box-sizing: border-box; }\n#um-inject-panel textarea { max-width: 100%; width: 100%; }\n#um-inject-panel button { min-width: 0; }\n'));
-                document.head.appendChild(style);
-            }catch(e){/* ignore */}
-        })();
+    /**
+     * 注入面板全局样式（避免 box-sizing 问题）
+     */
+    function injectPanelStyles(){
+        try{
+            var style = document.createElement('style');
+            style.type = 'text/css';
+            style.appendChild(document.createTextNode(
+                '\n#um-inject-panel, #um-inject-panel * { box-sizing: border-box; }\n' +
+                '#um-inject-panel textarea { max-width: 100%; width: 100%; }\n' +
+                '#um-inject-panel button { min-width: 0; }\n'
+            ));
+            document.head.appendChild(style);
+        }catch(e){
+            // 忽略
+        }
+    }
 
-        // 简单美化交互：按钮 hover 动画和 focus 样式（通过 JS 绑定以避免复杂样式注入）
-        (function(){
-            var ids = ['um-inject-close','um-clear-editor','um-clear-confirm-yes','um-clear-confirm-no','um-insert-mixed'];
-            ids.forEach(function(id){
-                var el = document.getElementById(id);
-                if(!el) return;
-                el.style.transition = 'all 120ms ease';
-                el.addEventListener('mouseenter', function(){ el.style.transform = 'translateY(-1px)'; el.style.boxShadow = '0 6px 12px rgba(0,0,0,0.06)'; });
-                el.addEventListener('mouseleave', function(){ el.style.transform = ''; el.style.boxShadow = ''; });
-                el.addEventListener('focus', function(){ el.style.outline = '2px solid '+THEME.focus; });
-                el.addEventListener('blur', function(){ el.style.outline = ''; });
+    /**
+     * 绑定面板按钮和交互事件
+     */
+    function bindPanelEvents(){
+        // 关闭按钮
+        document.getElementById('um-inject-close').addEventListener('click', function(){
+            document.getElementById('um-inject-panel').style.display = 'none';
+        });
+
+        // 粘贴按钮
+        var pasteBtn = document.getElementById('um-paste-content');
+        if(pasteBtn){
+            pasteBtn.addEventListener('click', function(){
+                var ta = document.getElementById('um-inject-mixed');
+                handlePasteToTextarea(ta);
             });
-        })();
+        }
 
-        document.getElementById('um-inject-close').addEventListener('click', function(){ panel.style.display = 'none'; });
-
-        // 已移除预览和单独插入文本按钮：只保留插入混合内容一项
+        // 插入混合内容按钮
         document.getElementById('um-insert-mixed').addEventListener('click', function(){
             var mixed = document.getElementById('um-inject-mixed').value || '';
             if(!mixed) return alert('混合内容为空');
+            
             var id = detectEditorId();
             var ed = UM.getEditor(id) || UM.getEditor('myEditor');
             if(!ed) return alert('找不到编辑器实例');
+            
             injectMixedContentToUM(ed, mixed);
         });
 
-        // 内联确认：在清空按钮旁显示确认框（包含“确认 / 取消”），并在若干秒后自动隐藏
-        (function(){
-            var btn = document.getElementById('um-clear-editor');
-            var box = document.getElementById('um-clear-confirm');
-            var yes = document.getElementById('um-clear-confirm-yes');
-            var no = document.getElementById('um-clear-confirm-no');
-            var hideTimer = null;
-            function restoreButton(){ try{ if(btn) btn.style.display = ''; }catch(e){} }
-            function hideBox(){ if(!box) return; box.style.opacity = '0'; if(hideTimer){ clearTimeout(hideTimer); hideTimer = null; } // wait for transition end to set display none
-                var onEnd = function(){ try{ box.style.display = 'none'; box.removeEventListener('transitionend', onEnd); }catch(e){} }; box.addEventListener('transitionend', onEnd);
-                restoreButton(); }
-            function showBox(){ if(!box) return; if(btn) btn.style.display = 'none'; box.style.display = 'inline-flex'; box.style.alignItems = 'center'; // ensure the browser registers the display change before opacity
-                requestAnimationFrame(function(){ box.style.opacity = '1'; }); if(hideTimer) clearTimeout(hideTimer); hideTimer = setTimeout(hideBox, 6000); }
-            if(!btn || !box || !yes || !no) return;
-            btn.addEventListener('click', function(e){
-                e.stopPropagation();
-                if(box.style.display === 'inline-flex') hideBox(); else showBox();
-            });
-            no.addEventListener('click', function(e){ e.stopPropagation(); hideBox(); });
-            yes.addEventListener('click', function(e){
-                e.stopPropagation(); hideBox();
-                try{
-                    var id = detectEditorId();
-                    var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
-                    if(!inst || !inst.ed) return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
-                    var ed = inst.ed;
-                    if(typeof ed.setContent === 'function'){
-                        ed.setContent('');
-                    } else if(typeof ed.execCommand === 'function'){
-                        ed.execCommand('inserthtml', '');
-                    } else {
-                        return alert('编辑器不支持清空操作');
-                    }
-                }catch(err){ console.error('clear editor failed', err); alert('清空失败: '+(err && err.message?err.message:err)); }
-                // 操作完成后恢复按钮（hideBox 已调用）
-            });
-            // 点击页面其它区域时隐藏确认框并恢复按钮
-            document.addEventListener('click', function(ev){ if(box && box.style.display === 'inline-flex'){ hideBox(); } });
-        })();
+        // 清空编辑器逻辑（内联确认）
+        createClearConfirmLogic();
+
+        // 按钮 hover 和 focus 美化
+        enhanceButtonInteractions();
     }
 
-    // 如果面板存在，重新计算它的位置以确保在悬浮标上方
+    /**
+     * 创建清空编辑器的确认逻辑（内联确认框）
+     */
+    function createClearConfirmLogic(){
+        var btn = document.getElementById('um-clear-editor');
+        var box = document.getElementById('um-clear-confirm');
+        var yes = document.getElementById('um-clear-confirm-yes');
+        var no = document.getElementById('um-clear-confirm-no');
+        
+        if(!btn || !box || !yes || !no) return;
+
+        var hideTimer = null;
+
+        function restoreButton(){
+            try{ if(btn) btn.style.display = ''; }catch(e){}
+        }
+
+        function hideBox(){
+            if(!box) return;
+            box.style.opacity = '0';
+            if(hideTimer){
+                clearTimeout(hideTimer);
+                hideTimer = null;
+            }
+            // 等待过渡动画结束后隐藏
+            var onEnd = function(){
+                try{
+                    box.style.display = 'none';
+                    box.removeEventListener('transitionend', onEnd);
+                }catch(e){}
+            };
+            box.addEventListener('transitionend', onEnd);
+            restoreButton();
+        }
+
+        function showBox(){
+            if(!box) return;
+            if(btn) btn.style.display = 'none';
+            box.style.display = 'inline-flex';
+            box.style.alignItems = 'center';
+            // 确保浏览器注册 display 变化后再改变 opacity
+            requestAnimationFrame(function(){
+                box.style.opacity = '1';
+            });
+            if(hideTimer) clearTimeout(hideTimer);
+            // 6 秒后自动隐藏
+            hideTimer = setTimeout(hideBox, 6000);
+        }
+
+        // 清空按钮点击
+        btn.addEventListener('click', function(e){
+            e.stopPropagation();
+            if(box.style.display === 'inline-flex'){
+                hideBox();
+            }else{
+                showBox();
+            }
+        });
+
+        // 取消按钮
+        no.addEventListener('click', function(e){
+            e.stopPropagation();
+            hideBox();
+        });
+
+        // 确认按钮
+        yes.addEventListener('click', function(e){
+            e.stopPropagation();
+            hideBox();
+            
+            try{
+                var id = detectEditorId();
+                var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
+                if(!inst || !inst.ed){
+                    return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
+                }
+                
+                var ed = inst.ed;
+                if(typeof ed.setContent === 'function'){
+                    ed.setContent('');
+                }else if(typeof ed.execCommand === 'function'){
+                    ed.execCommand('inserthtml', '');
+                }else{
+                    return alert('编辑器不支持清空操作');
+                }
+            }catch(err){
+                console.error('clear editor failed', err);
+                alert('清空失败: ' + (err && err.message ? err.message : err));
+            }
+        });
+
+        // 点击页面其它区域时隐藏确认框
+        document.addEventListener('click', function(ev){
+            if(box && box.style.display === 'inline-flex'){
+                hideBox();
+            }
+        });
+    }
+
+    /**
+     * 增强按钮交互效果（hover 和 focus 样式）
+     */
+    function enhanceButtonInteractions(){
+        var ids = ['um-inject-close', 'um-clear-editor', 'um-clear-confirm-yes', 'um-clear-confirm-no', 'um-insert-mixed'];
+        ids.forEach(function(id){
+            var el = document.getElementById(id);
+            if(!el) return;
+            
+            el.style.transition = 'all 120ms ease';
+            el.addEventListener('mouseenter', function(){
+                el.style.transform = 'translateY(-1px)';
+                el.style.boxShadow = '0 6px 12px rgba(0,0,0,0.06)';
+            });
+            el.addEventListener('mouseleave', function(){
+                el.style.transform = '';
+                el.style.boxShadow = '';
+            });
+            el.addEventListener('focus', function(){
+                el.style.outline = '2px solid ' + THEME.focus;
+            });
+            el.addEventListener('blur', function(){
+                el.style.outline = '';
+            });
+        });
+    }
+
+    /**
+     * 重新计算面板位置（确保在悬浮标上方）
+     */
     function repositionPanelAboveHandle(){
         var panel = document.getElementById('um-inject-panel');
         var handle = document.getElementById('um-inject-handle');
         if(!panel || !handle) return;
+        
         try{
             var hr = handle.getBoundingClientRect();
             var rightPx = Math.max(8, Math.round(window.innerWidth - hr.right));
             var bottomPx = Math.max(12, Math.round((window.innerHeight - hr.top) + 24));
             panel.style.right = rightPx + 'px';
             panel.style.bottom = bottomPx + 'px';
-        }catch(e){/* ignore */}
-    }
-
-    window.addEventListener('resize', function(){ repositionPanelAboveHandle(); });
-
-    // 注入混合内容函数（与 demo-inject.html 中一致）
-    // LaTeX 预处理，和 demo 页面保持一致
-    function normalizeLatexForMathQuill(latex){
-        if(!latex) return latex;
-        var s = String(latex);
-    // 避免在某些环境下使用 \left/\right 导致空白渲染的问题
-        s = s.replace(/\\\{/g, '\\left\\{').replace(/\\\}/g, '\\right\\}');
-    // 为了兼容 AI 输出中常见的 "\\mathbb{X}" 形式（例如 "\\mathbb{R}"），
-    // 这里对单个字母的情形做预处理：将 "\\mathbb{X}" 转为 "\\X"，
-    // 仅针对单字母进行替换，避免误改如 "\\mathbb{ABC}" 或更复杂的宏。
-        s = s.replace(/\\mathbb\{\s*([A-Za-z])\s*\}/g, function(_, ch){ return '\\' + ch; });
-    // 将 \complement 映射为带花括号的 Unicode 补集符号 {∁}，以便下标/上标能正确绑定（例如 {∁}_{R} 或 {∁}^{R}）
-    // 注意：原先使用 \b 在遇到下划线 '_' 时无法匹配（因为 '_' 被视为单词字符），
-    // 所以这里使用前瞻保证在下划线/空白/花括号或行尾时仍能匹配到 \complement
-        s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
-        s = s.replace(/\|/g, '\\mid');
-        s = s.replace(/\s{2,}/g, ' ');
-
-        // 处理 mhchem 的 \ce{...}：支持嵌套大括号的解析，保留内部内容并用大括号包裹以保留分组
-        s = (function(str){
-            var out = '';
-            var i = 0;
-            while (i < str.length) {
-                var p = str.indexOf('\\ce{', i);
-                if (p === -1) { out += str.slice(i); break; }
-                out += str.slice(i, p);
-                var j = p + 4; // position after '\\ce{'
-                var depth = 1;
-                while (j < str.length && depth > 0) {
-                    if (str[j] === '{') depth++;
-                    else if (str[j] === '}') depth--;
-                    j++;
-                }
-                var inner = str.slice(p + 4, Math.max(p + 4, j - 1));
-                out += '{' + inner + '}';
-                i = j;
-            }
-            return out;
-        })(s);
-        return s;
-    }
-
-    async function injectMixedContentToUM(editor, mixedText) {
-        if (!editor || !editor.execCommand) { console.error('editor not found or invalid'); return; }
-        // 优先识别单个公式 token 的情形（尽量使用 editor 的公式命令或 MathQuill API）
-        try{
-            var whole = String(mixedText || '').trim();
-            var fullRe = /^(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)$/;
-            var mFull = whole.match(fullRe);
-            if(mFull){
-                var token = mFull[1];
-                var latex = token;
-                if (token.startsWith('$$') && token.endsWith('$$')) { latex = token.slice(2, -2); }
-                else if (token.indexOf('\\[') === 0 && token.slice(-2) === '\\]') { latex = token.slice(2, -2); }
-                else if (token.indexOf('\\(') === 0 && token.slice(-2) === '\\)') { latex = token.slice(2, -2); }
-                else if (token.indexOf('$') === 0 && token.slice(-1) === '$') { latex = token.slice(1, -1); }
-                latex = latex.trim();
-                var normalizedWhole = normalizeLatexForMathQuill(latex);
-                try{
-                    var inst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
-                    if(inst && inst.win){
-                        try{
-                            var cw = inst.win;
-                            var MQ = cw.MathQuill && typeof cw.MathQuill.getInterface === 'function' ? cw.MathQuill.getInterface(2) : null;
-                            if(MQ){
-                                var temp = cw.document.createElement('span');
-                                temp.className = 'mq-temp-for-insert';
-                                cw.document.body.appendChild(temp);
-                                var staticMath = MQ.StaticMath(temp);
-                                staticMath.latex(normalizedWhole);
-                                var outer = temp.outerHTML;
-                                temp.parentNode && temp.parentNode.removeChild(temp);
-                                var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
-                                if(targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function'){
-                                    targetInst.ed.execCommand('inserthtml', outer);
-                                    return;
-                                }
-                            }
-                        }catch(innerErr){ console.warn('MathQuill API render failed or unavailable in target window', innerErr); }
-                    }
-                    if(typeof editor.execCommand === 'function'){
-                        editor.execCommand('formula', normalizedWhole);
-                        return;
-                    }
-                }catch(err){ console.warn('execCommand formula failed, falling back to HTML insert', err); }
-            }
-        }catch(e){ /* ignore and continue to fallback */ }
-
-        // helper: escape html and simple text->html fallback
-        function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
-        function textToHtmlFallback(s){ if(!s) return ''; s = String(s).replace(/\r\n/g,'\n').replace(/\r/g,'\n'); var tmp = escapeHtml(s); tmp = tmp.replace(/\n{2,}/g,'<br><br>'); tmp = tmp.replace(/\n/g,'<br>'); return tmp; }
-
-        // dynamic loader for marked (returns Promise resolving to marked or null)
-        function loadMarked(){
-            return new Promise(function(resolve){
-                if(window.marked) return resolve(window.marked);
-                try{
-                    var s = document.createElement('script');
-                    s.src = 'https://cdn.jsdelivr.net/npm/marked@5.1.1/marked.min.js';
-                    s.onload = function(){ resolve(window.marked || null); };
-                    s.onerror = function(){ resolve(null); };
-                    document.head.appendChild(s);
-                }catch(e){ resolve(null); }
-            });
+        }catch(e){
+            // 忽略
         }
-
-        // 用占位符保护 LaTeX 片段
-        var latexRe = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)/g;
-        var tokens = [];
-        var counter = 0;
-        var withPlaceholders = String(mixedText || '').replace(latexRe, function(m){ var id = counter++; tokens.push({raw: m}); return '@@UM_LATEX_' + id + '@@'; });
-
-        // 根据复选框决定是否启用 marked
-        var enableMd = true;
-        try{ var cb = document.getElementById('um-enable-markdown'); enableMd = !!(cb && cb.checked); }catch(e){ enableMd = true; }
-
-    var html = '';
-        if(enableMd){
-            // 优先使用已存在的 marked，否则尝试动态加载；加载失败回退到简单转换
-            var mdParser = window.marked || null;
-            if(!mdParser){ mdParser = await loadMarked(); }
-            try{
-                if(mdParser && typeof mdParser === 'function'){
-                    // marked 返回 HTML
-                    html = mdParser(withPlaceholders);
-                } else if(mdParser && mdParser.parse) {
-                    html = mdParser.parse(withPlaceholders);
-                } else {
-                    html = textToHtmlFallback(withPlaceholders);
-                }
-            }catch(e){ console.warn('marked parse failed, falling back', e); html = textToHtmlFallback(withPlaceholders); }
-        } else {
-            // 不启用 Markdown：转义文本并保留占位符，然后把换行替换为 <br>
-            var PLACE_IN = '\uFFF0';
-            var PLACE_OUT = '\uFFF1';
-            var tmp = withPlaceholders.replace(/@@UM_LATEX_(\d+)@@/g, function(_, n){ return PLACE_IN + 'UM_LATEX_' + n + PLACE_OUT; });
-            tmp = escapeHtml(tmp);
-            tmp = tmp.replace(new RegExp(PLACE_IN + 'UM_LATEX_(\\d+)' + PLACE_OUT, 'g'), function(_, n){ return '@@UM_LATEX_' + n + '@@'; });
-            tmp = tmp.replace(/\n/g, '<br>');
-            html = tmp;
-        }
-
-        // 将任何 <h1>-<h6> 替换为 <p><strong>...</strong></p>，因为目标编辑器不支持 hN 标签
-        try{
-            html = html.replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, function(_, inner){ return '<p><strong>' + inner + '</strong></p>'; });
-        }catch(e){ /* ignore */ }
-
-        // 把占位符替换为公式 HTML
-        for(var i=0;i<tokens.length;i++){
-            var tkn = tokens[i].raw;
-            var token = tkn;
-            var isDisplay = false;
-            if (token.indexOf('$$') === 0 && token.lastIndexOf('$$') === token.length-2) { token = token.slice(2, -2); isDisplay = true; }
-            else if (token.indexOf('\\[') === 0 && token.slice(-2) === '\\]') { token = token.slice(2, -2); isDisplay = true; }
-            else if (token.indexOf('\\(') === 0 && token.slice(-2) === '\\)') { token = token.slice(2, -2); isDisplay = false; }
-            else if (token.indexOf('$') === 0 && token.slice(-1) === '$') { token = token.slice(1, -1); isDisplay = false; }
-            token = token.trim();
-            var normalized = normalizeLatexForMathQuill(token);
-            var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
-            var repl = isDisplay ? '<div class="math-display">' + span + '</div>' : span;
-            html = html.split('@@UM_LATEX_' + i + '@@').join(repl);
-        }
-
-        try{
-            var id = detectEditorId();
-            var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
-            if(!inst || !inst.ed) return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
-            console.log('injectMixedContentToUM -> target id=', id, 'found at', inst.where, 'src=', inst.src||'');
-            inst.ed.execCommand('inserthtml', html);
-        }catch(e){ console.error('inserthtml failed', e); alert('插入失败: '+(e && e.message ? e.message : e)); }
     }
 
-    function insertContent(html){
-        try{
-            var id = detectEditorId();
-            var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
-            if(!inst || !inst.ed) return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
-            console.log('insertContent -> target id=', id, 'found at', inst.where, 'src=', inst.src||'');
-            var ed = inst.ed;
-            // 改为替换整个编辑器内容（覆盖），而不是在当前位置插入
-            if (typeof ed.setContent === 'function') {
-                ed.setContent(html);
-            } else {
-                // 回退到插入方式（老版本可能没有 setContent）
-                ed.execCommand('inserthtml', html, true);
-            }
-        }catch(e){ console.error('insertContent error', e); alert('插入失败: '+e.message); }
-    }
-
-    function insertLatex(latex){
-        try{
-            if(!latex) return alert('LaTeX 为空');
-            var id = detectEditorId();
-            var ed = UM.getEditor(id);
-            if(!ed) ed = UM.getEditor('myEditor');
-            if(!ed) return alert('找不到编辑器实例');
-            ed.execCommand('formula', latex);
-        }catch(e){ console.error('insertLatex error', e); alert('插入公式失败: '+e.message); }
-    }
-
-    // 热键 Ctrl+Alt+I 打开/切换面板显示
-    document.addEventListener('keydown', function(e){
-        if(e.ctrlKey && e.altKey && e.key.toLowerCase() === 'i'){
-            e.preventDefault();
-            if(!document.getElementById('um-inject-panel')) createPanel();
-            var panel = document.getElementById('um-inject-panel');
-            panel.style.display = (panel.style.display === 'none') ? 'block' : 'block';
-            // 已移除独立 LaTeX 输入，改为聚焦混合输入框
-            var mixedEl = document.getElementById('um-inject-mixed');
-            if(mixedEl) mixedEl.focus();
-        }
-    }, false);
-
-    // 初始化：等 UM 可用后创建面板（面板只在按热键时显示）
-    waitForUM(function(){
-        console.log('UM detected - UM Injector available (Ctrl+Alt+I)');
-        // 提前不渲染 panel，等热键按下创建
-        // 创建页面右下角的小悬浮标（显示简短域名），点击展开/收起面板
-        try{
-            createHandle();
-        }catch(e){console.error('createHandle failed', e)}
-    });
-
+    /**
+     * 创建页面右下角的悬浮标（点击展开/收起面板）
+     */
     function createHandle(){
         if(document.getElementById('um-inject-handle')) return;
+
         var h = document.createElement('div');
         h.id = 'um-inject-handle';
         h.style.position = 'fixed';
         h.style.right = '20px';
-    // 整体向下移动悬浮标位置
-    h.style.bottom = '20px';
-        // 更漂亮的样式：圆形按钮，悬停时展开显示完整域名
+        h.style.bottom = '20px';
         h.style.width = '44px';
         h.style.height = '44px';
-    h.style.borderRadius = '8px';
-    h.style.background = 'linear-gradient(135deg,'+THEME.primaryLight+','+THEME.primary+')';
-    h.style.color = '#fff';
+        h.style.borderRadius = '8px';
+        h.style.background = 'linear-gradient(135deg,' + THEME.primaryLight + ',' + THEME.primary + ')';
+        h.style.color = '#fff';
         h.style.display = 'flex';
         h.style.alignItems = 'center';
         h.style.justifyContent = 'center';
-    h.style.boxShadow = '0 6px 20px '+THEME.shadow;
+        h.style.boxShadow = '0 6px 20px ' + THEME.shadow;
         h.style.cursor = 'pointer';
         h.style.zIndex = 1000000;
         h.style.fontWeight = '700';
         h.style.fontSize = '13px';
         h.style.transition = 'width 180ms ease, padding 180ms ease, border-radius 180ms ease';
         h.title = '橙果错题助手 - 点击展开/收起面板';
-        // host 用于悬停时显示
+        h.textContent = '🍊';
+
         var fullHost = window.location.hostname || 'site';
-    // 默认显示简短标识 emoji
-    h.textContent = '🍊';
+
         // 点击切换面板
         h.addEventListener('click', function(){
             if(!document.getElementById('um-inject-panel')) createPanel();
@@ -569,9 +572,17 @@
             if(!p) return;
             p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
         });
-        // active visual: 按下时微缩并减弱阴影
-        h.addEventListener('mousedown', function(){ h.style.transform = 'scale(0.96)'; h.style.boxShadow = '0 4px 14px '+THEME.shadow; });
-        document.addEventListener('mouseup', function(){ h.style.transform = ''; h.style.boxShadow = '0 6px 20px '+THEME.shadow; });
+
+        // 按下时视觉反馈
+        h.addEventListener('mousedown', function(){
+            h.style.transform = 'scale(0.96)';
+            h.style.boxShadow = '0 4px 14px ' + THEME.shadow;
+        });
+        document.addEventListener('mouseup', function(){
+            h.style.transform = '';
+            h.style.boxShadow = '0 6px 20px ' + THEME.shadow;
+        });
+
         // 悬停展开显示完整域名
         h.addEventListener('mouseenter', function(){
             h.style.width = '170px';
@@ -587,7 +598,410 @@
             h.style.justifyContent = 'center';
             h.textContent = '🍊';
         });
+
         document.body.appendChild(h);
     }
+
+    // ========================================
+    // 核心处理模块
+    // ========================================
+
+    /**
+     * 对 LaTeX 代码进行归一化处理（适配 MathQuill 渲染）
+     * 
+     * 处理项：
+     * - 单字母 \mathbb{X} -> \X
+     * - 竖线 | -> \mid
+     * - 压缩多余空白
+     * - 处理 mhchem 的 \ce{...}
+     * - \xlongequal{...} -> =
+     * 
+     * @param {string} latex 原始 LaTeX 代码
+     * @returns {string} 归一化后的 LaTeX
+     */
+    function normalizeLatexForMathQuill(latex){
+        if(!latex) return latex;
+        var s = String(latex);
+
+        // 花括号处理（避免在某些环境下使用 \left/\right 导致空白渲染）
+        s = s.replace(/\\\{/g, '\\left\\{').replace(/\\\}/g, '\\right\\}');
+
+        // 单字母 \mathbb{X} -> \X（兼容 AI 输出）
+        s = s.replace(/\\mathbb\{\s*([A-Za-z])\s*\}/g, function(_, ch){
+            return '\\' + ch;
+        });
+
+    // \complement 映射（补集符号）
+    s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
+
+    // 将常见的 \not\... / 标准 LaTeX 名称直接替换为单个 Unicode 符号，
+    // 以避免在后续 MathQuill 解析中被拆分为 "\\not" + "其他符号"
+    // 顺序从长到短匹配以防止部分匹配（例如先匹配 subsetneqq 再匹配 subseteq/subset）
+    // 对应关系：仅使用标准 LaTeX 名称替换为 Unicode（不保留 \not\... 形式）
+    // 按表格整理的 LaTeX -> Unicode 替换（从长到短顺序，以避免部分匹配）
+    // 1) 真子集 / 真超集（严格，不等于）
+    // \varsubsetneqq, \varsubsetneq, \subsetneqq, \subsetneq -> ⊊ (U+228A)
+    s = s.replace(/\\varsubsetneqq(?=[_\s{]|$)/g, '\u228A');
+    s = s.replace(/\\varsubsetneq(?=[_\s{]|$)/g, '\u228A');
+    s = s.replace(/\\subsetneqq(?=[_\s{]|$)/g, '⫋');
+    s = s.replace(/\\subsetneq(?=[_\s{]|$)/g, '⊊');
+    // \varsupsetneqq, \varsupsetneq, \supsetneqq, \supsetneq -> ⊋ (U+228B)
+    s = s.replace(/\\varsupsetneqq(?=[_\s{]|$)/g, '\u228B');
+    s = s.replace(/\\varsupsetneq(?=[_\s{]|$)/g, '\u228B');
+    s = s.replace(/\\supsetneqq(?=[_\s{]|$)/g, '⫌');
+    s = s.replace(/\\supsetneq(?=[_\s{]|$)/g, '⊋');
+
+    // 2) 普通子集 / 超集
+    // \sqsubseteq -> ⊑ (U+2291)
+    s = s.replace(/\\sqsubseteq(?=[_\s{]|$)/g, '\u2291');
+    // \sqsupseteq -> ⊒ (U+2292)
+    s = s.replace(/\\sqsupseteq(?=[_\s{]|$)/g, '\u2292');
+    // \subseteq -> ⊆ (U+2286)
+    s = s.replace(/\\subseteq(?=[_\s{]|$)/g, '\u2286');
+    // \supseteq -> ⊇ (U+2287)
+    s = s.replace(/\\supseteq(?=[_\s{]|$)/g, '\u2287');
+    // \subset -> ⊂ (U+2282)
+    s = s.replace(/\\subset(?=[_\s{]|$)/g, '\u2282');
+    // \supset -> ⊃ (U+2283)
+    s = s.replace(/\\supset(?=[_\s{]|$)/g, '\u2283');
+
+    // 3) 非关系 / 否定（标准命令）
+    // \nsubseteq -> ⊈ (U+2288)
+    s = s.replace(/\\nsubseteq(?=[_\s{]|$)/g, '\u2288');
+    // \nsupseteq -> ⊉ (U+2289)
+    s = s.replace(/\\nsupseteq(?=[_\s{]|$)/g, '\u2289');
+    // \nsubset -> ⊄ (U+2284)
+    s = s.replace(/\\nsubset(?=[_\s{]|$)/g, '\u2284');
+    // \nsupset -> ⊅ (U+2285)
+    s = s.replace(/\\nsupset(?=[_\s{]|$)/g, '\u2285');
+    // \notin -> ∉ (U+2209)
+    s = s.replace(/\\notin(?=[_\s{]|$)/g, '\u2209');
+    // \not\ni (用户可能输入) -> ∌ (U+220C) 但按你要求不保留 \not\... 形式；这里保留 \nni 形式映射
+    s = s.replace(/\\nni(?=[_\s{]|$)/g, '\u220C');
+
+        // 竖线替换
+        s = s.replace(/\|/g, '\\mid');
+
+        // 压缩连续空白
+        s = s.replace(/\s{2,}/g, ' ');
+
+        // 处理 mhchem 的 \ce{...}（支持嵌套大括号）
+        // 策略：找到 \ce{，然后用深度计数匹配到对应的 }，保留内部内容并用大括号包裹
+        s = (function(str){
+            var out = '';
+            var i = 0;
+            while(i < str.length){
+                var p = str.indexOf('\\ce{', i);
+                if(p === -1){
+                    out += str.slice(i);
+                    break;
+                }
+                out += str.slice(i, p);
+                var j = p + 4; // 跳过 '\ce{'
+                var depth = 1;
+                while(j < str.length && depth > 0){
+                    if(str[j] === '{') depth++;
+                    else if(str[j] === '}') depth--;
+                    j++;
+                }
+                var inner = str.slice(p + 4, Math.max(p + 4, j - 1));
+                out += '{' + inner + '}';
+                i = j;
+            }
+            return out;
+        })(s);
+
+        // \xlongequal{...} -> =
+        s = s.replace(/\\xlongequal\{[^}]*\}/g, '=');
+
+        return s;
+    }
+
+    /**
+     * 注入混合内容到 UMEditor
+     * 
+     * 流程：
+     * 1. 单公式快速路径：若整个输入是单个公式，优先用 MathQuill 或 execCommand('formula')
+     * 2. 混合内容路径：
+     *    a. 用占位符保护 LaTeX 片段
+     *    b. 根据 Markdown 开关决定是否用 marked 解析
+     *    c. 将占位符替换为公式 HTML
+     *    d. 插入到编辑器
+     * 
+     * @param {Object} editor UMEditor 实例
+     * @param {string} mixedText 混合内容（文本 + LaTeX）
+     */
+    async function injectMixedContentToUM(editor, mixedText){
+        if(!editor || !editor.execCommand){
+            console.error('editor not found or invalid');
+            return;
+        }
+
+        // ========== 步骤 1：单公式快速路径 ==========
+        try{
+            var whole = String(mixedText || '').trim();
+            var fullRe = /^(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)$/;
+            var mFull = whole.match(fullRe);
+            
+            if(mFull){
+                var token = mFull[1];
+                var latex = token;
+                
+                // 剥离定界符
+                if(token.startsWith('$$') && token.endsWith('$$')){
+                    latex = token.slice(2, -2);
+                }else if(token.indexOf('\\[') === 0 && token.slice(-2) === '\\]'){
+                    latex = token.slice(2, -2);
+                }else if(token.indexOf('\\(') === 0 && token.slice(-2) === '\\)'){
+                    latex = token.slice(2, -2);
+                }else if(token.indexOf('$') === 0 && token.slice(-1) === '$'){
+                    latex = token.slice(1, -1);
+                }
+                
+                latex = latex.trim();
+                var normalizedWhole = normalizeLatexForMathQuill(latex);
+
+                // 尝试 MathQuill 渲染
+                try{
+                    var inst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
+                    if(inst && inst.win){
+                        try{
+                            var cw = inst.win;
+                            var MQ = cw.MathQuill && typeof cw.MathQuill.getInterface === 'function' 
+                                ? cw.MathQuill.getInterface(2) 
+                                : null;
+                            
+                            if(MQ){
+                                var temp = cw.document.createElement('span');
+                                temp.className = 'mq-temp-for-insert';
+                                cw.document.body.appendChild(temp);
+                                
+                                var staticMath = MQ.StaticMath(temp);
+                                staticMath.latex(normalizedWhole);
+                                
+                                var outer = temp.outerHTML;
+                                temp.parentNode && temp.parentNode.removeChild(temp);
+                                
+                                var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
+                                if(targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function'){
+                                    targetInst.ed.execCommand('inserthtml', outer);
+                                    return;
+                                }
+                            }
+                        }catch(innerErr){
+                            console.warn('MathQuill API render failed or unavailable in target window', innerErr);
+                        }
+                    }
+                    
+                    // 回退到 execCommand('formula')
+                    if(typeof editor.execCommand === 'function'){
+                        editor.execCommand('formula', normalizedWhole);
+                        return;
+                    }
+                }catch(err){
+                    console.warn('execCommand formula failed, falling back to HTML insert', err);
+                }
+            }
+        }catch(e){
+            // 忽略并继续到混合内容路径
+        }
+
+        // ========== 辅助函数定义 ==========
+        
+        /**
+         * HTML 实体转义
+         * @param {string} s 
+         * @returns {string}
+         */
+        function escapeHtml(s){
+            return String(s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        /**
+         * 文本转 HTML 回退（简单换行处理）
+         * @param {string} s 
+         * @returns {string}
+         */
+        function textToHtmlFallback(s){
+            if(!s) return '';
+            s = String(s).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+            var tmp = escapeHtml(s);
+            tmp = tmp.replace(/\n{2,}/g, '<br><br>');
+            tmp = tmp.replace(/\n/g, '<br>');
+            return tmp;
+        }
+
+        /**
+         * 动态加载 marked 库
+         * @returns {Promise<Object|null>}
+         */
+        function loadMarked(){
+            return new Promise(function(resolve){
+                if(window.marked) return resolve(window.marked);
+                try{
+                    var s = document.createElement('script');
+                    s.src = 'https://cdn.jsdelivr.net/npm/marked@5.1.1/marked.min.js';
+                    s.onload = function(){ resolve(window.marked || null); };
+                    s.onerror = function(){ resolve(null); };
+                    document.head.appendChild(s);
+                }catch(e){
+                    resolve(null);
+                }
+            });
+        }
+
+        // ========== 步骤 2：混合内容路径 ==========
+
+        // 2a. 用占位符保护 LaTeX 片段
+        var latexRe = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)/g;
+        var tokens = [];
+        var counter = 0;
+        var withPlaceholders = String(mixedText || '').replace(latexRe, function(m){
+            var id = counter++;
+            tokens.push({raw: m});
+            return '@@UM_LATEX_' + id + '@@';
+        });
+
+        // 2b. 根据复选框决定是否启用 Markdown
+        var enableMd = true;
+        try{
+            var cb = document.getElementById('um-enable-markdown');
+            enableMd = !!(cb && cb.checked);
+        }catch(e){
+            enableMd = true;
+        }
+
+        var html = '';
+        if(enableMd){
+            // 使用 marked 解析 Markdown
+            var mdParser = window.marked || null;
+            if(!mdParser){
+                mdParser = await loadMarked();
+            }
+            
+            try{
+                if(mdParser && typeof mdParser === 'function'){
+                    html = mdParser(withPlaceholders);
+                }else if(mdParser && mdParser.parse){
+                    html = mdParser.parse(withPlaceholders);
+                }else{
+                    html = textToHtmlFallback(withPlaceholders);
+                }
+            }catch(e){
+                console.warn('marked parse failed, falling back', e);
+                html = textToHtmlFallback(withPlaceholders);
+            }
+        }else{
+            // 不启用 Markdown：转义并保留占位符
+            var PLACE_IN = '\uFFF0';
+            var PLACE_OUT = '\uFFF1';
+            var tmp = withPlaceholders.replace(/@@UM_LATEX_(\d+)@@/g, function(_, n){
+                return PLACE_IN + 'UM_LATEX_' + n + PLACE_OUT;
+            });
+            tmp = escapeHtml(tmp);
+            tmp = tmp.replace(new RegExp(PLACE_IN + 'UM_LATEX_(\\d+)' + PLACE_OUT, 'g'), function(_, n){
+                return '@@UM_LATEX_' + n + '@@';
+            });
+            tmp = tmp.replace(/\n/g, '<br>');
+            html = tmp;
+        }
+
+        // 2c. HTML 后处理：h1-h6 -> p + strong
+        try{
+            html = html.replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, function(_, inner){
+                return '<p><strong>' + inner + '</strong></p>';
+            });
+        }catch(e){
+            // 忽略
+        }
+
+        // 2d. 将占位符替换为公式 HTML
+        for(var i=0; i<tokens.length; i++){
+            var tkn = tokens[i].raw;
+            var token = tkn;
+            var isDisplay = false;
+
+            // 判断显示/内联并剥离定界符
+            if(token.indexOf('$$') === 0 && token.lastIndexOf('$$') === token.length - 2){
+                token = token.slice(2, -2);
+                isDisplay = true;
+            }else if(token.indexOf('\\[') === 0 && token.slice(-2) === '\\]'){
+                token = token.slice(2, -2);
+                isDisplay = true;
+            }else if(token.indexOf('\\(') === 0 && token.slice(-2) === '\\)'){
+                token = token.slice(2, -2);
+                isDisplay = false;
+            }else if(token.indexOf('$') === 0 && token.slice(-1) === '$'){
+                token = token.slice(1, -1);
+                isDisplay = false;
+            }
+
+            token = token.trim();
+            var normalized = normalizeLatexForMathQuill(token);
+            var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
+            var repl = isDisplay ? '<div class="math-display">' + span + '</div>' : span;
+            html = html.split('@@UM_LATEX_' + i + '@@').join(repl);
+        }
+
+        // 2e. 插入到编辑器
+        try{
+            var id = detectEditorId();
+            var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
+            if(!inst || !inst.ed){
+                return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
+            }
+            
+            console.log('injectMixedContentToUM -> target id=', id, 'found at', inst.where, 'src=', inst.src || '');
+            inst.ed.execCommand('inserthtml', html);
+        }catch(e){
+            console.error('inserthtml failed', e);
+            alert('插入失败: ' + (e && e.message ? e.message : e));
+        }
+    }
+
+    // ========================================
+    // 初始化模块
+    // ========================================
+
+    /**
+     * 监听热键 Ctrl+Alt+I 打开/切换面板
+     */
+    document.addEventListener('keydown', function(e){
+        if(e.ctrlKey && e.altKey && e.key.toLowerCase() === 'i'){
+            e.preventDefault();
+            if(!document.getElementById('um-inject-panel')){
+                createPanel();
+            }
+            var panel = document.getElementById('um-inject-panel');
+            panel.style.display = 'block';
+            
+            var mixedEl = document.getElementById('um-inject-mixed');
+            if(mixedEl) mixedEl.focus();
+        }
+    }, false);
+
+    /**
+     * 监听窗口大小变化，重新定位面板
+     */
+    window.addEventListener('resize', function(){
+        repositionPanelAboveHandle();
+    });
+
+    /**
+     * 等待 UM 加载完成后初始化
+     */
+    waitForUM(function(){
+        console.log('UM detected - UM Injector available (Ctrl+Alt+I)');
+        try{
+            createHandle();
+        }catch(e){
+            console.error('createHandle failed', e);
+        }
+    });
 
 })();
