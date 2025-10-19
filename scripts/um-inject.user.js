@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.14.00004
+// @version      2025.10.20.00001
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -18,6 +18,9 @@
     // 配置模块
     // ========================================
     
+    /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
+    var DEBUG_MODE = false;
+    
     /**
      * 主题颜色配置（基于橙果色 #ff6000 的暗色调整）
      */
@@ -31,6 +34,106 @@
     // ========================================
     // 工具函数模块
     // ========================================
+    
+    /**
+     * 查找包含 MathQuill 的窗口（主窗口或 iframe）
+     * @returns {{window: Window, jQuery: Object}|null} 返回包含 MathQuill 的窗口及其 jQuery 对象
+     */
+    function findMathQuillWindow(){
+        // 检查主窗口
+        if(window.jQuery && typeof window.jQuery.fn.mathquill === 'function'){
+            if(DEBUG_MODE) console.log('🔍 MathQuill 找到：主窗口');
+            return {window: window, jQuery: window.jQuery};
+        }
+        
+        // 检查所有 iframe
+        var iframes = document.getElementsByTagName('iframe');
+        for(var i = 0; i < iframes.length; i++){
+            try{
+                var cw = iframes[i].contentWindow;
+                if(cw && cw.jQuery && typeof cw.jQuery.fn.mathquill === 'function'){
+                    if(DEBUG_MODE) console.log('🔍 MathQuill 找到：iframe', i);
+                    return {window: cw, jQuery: cw.jQuery};
+                }
+            }catch(e){
+                // 跨域 iframe，忽略
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * 剥离 LaTeX 定界符，返回纯 LaTeX 和显示模式标志
+     * @param {string} token 带定界符的 LaTeX 字符串
+     * @returns {{latex: string, isDisplay: boolean}}
+     */
+    function stripLatexDelimiters(token){
+        var latex = token;
+        var isDisplay = false;
+        
+        if(token.indexOf('$$') === 0 && token.lastIndexOf('$$') === token.length - 2){
+            latex = token.slice(2, -2);
+            isDisplay = true;
+        }else if(token.indexOf('\\[') === 0 && token.slice(-2) === '\\]'){
+            latex = token.slice(2, -2);
+            isDisplay = true;
+        }else if(token.indexOf('\\(') === 0 && token.slice(-2) === '\\)'){
+            latex = token.slice(2, -2);
+            isDisplay = false;
+        }else if(token.indexOf('$') === 0 && token.slice(-1) === '$'){
+            latex = token.slice(1, -1);
+            isDisplay = false;
+        }
+        
+        return {latex: latex.trim(), isDisplay: isDisplay};
+    }
+    
+    /**
+     * HTML 实体转义
+     * @param {string} s 
+     * @returns {string}
+     */
+    function escapeHtml(s){
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+    
+    /**
+     * 文本转 HTML 回退（简单换行处理）
+     * @param {string} s 
+     * @returns {string}
+     */
+    function textToHtmlFallback(s){
+        if(!s) return '';
+        s = String(s).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        var tmp = escapeHtml(s);
+        tmp = tmp.replace(/\n{2,}/g, '<br><br>');
+        tmp = tmp.replace(/\n/g, '<br>');
+        return tmp;
+    }
+    
+    /**
+     * 动态加载 marked 库
+     * @returns {Promise<Object|null>}
+     */
+    function loadMarked(){
+        return new Promise(function(resolve){
+            if(window.marked) return resolve(window.marked);
+            try{
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/marked@5.1.1/marked.min.js';
+                s.onload = function(){ resolve(window.marked || null); };
+                s.onerror = function(){ resolve(null); };
+                document.head.appendChild(s);
+            }catch(e){
+                resolve(null);
+            }
+        });
+    }
 
     /**
      * 检测页面中可用的编辑器 ID
@@ -614,66 +717,37 @@
      * 智能预加载 MathQuill（如果尚未加载）
      * 
      * 策略：
-     * 1. 检查 MathQuill 是否已加载（主窗口或 iframe）
-     * 2. 如果已加载，直接执行回调
-     * 3. 如果未加载，插入一个极小的公式触发懒加载，然后执行回调
+     * 1. 检查 MathQuill 是否已加载（通过 findMathQuillWindow）
+     * 2. 如未加载，插入极简公式 'x' 触发懒加载
+     * 3. 轮询等待加载完成（最多 2 秒）
      * 
      * @param {Object} editor UMEditor 实例
      * @param {Function} callback 加载完成后的回调函数
      */
     function preloadMathQuillIfNeeded(editor, callback){
-        // 检查 MathQuill 是否已在主窗口或任何 iframe 中加载
-        function isMathQuillLoaded(){
-            // 检查主窗口
-            if(window.jQuery && typeof window.jQuery.fn.mathquill === 'function'){
-                return true;
-            }
-            
-            // 检查所有 iframe
-            var iframes = document.getElementsByTagName('iframe');
-            for(var i = 0; i < iframes.length; i++){
-                try{
-                    var cw = iframes[i].contentWindow;
-                    if(cw && cw.jQuery && typeof cw.jQuery.fn.mathquill === 'function'){
-                        return true;
-                    }
-                }catch(e){
-                    // 跨域 iframe，忽略
-                }
-            }
-            return false;
-        }
-        
         // 如果已加载，直接执行回调
-        if(isMathQuillLoaded()){
+        if(findMathQuillWindow()){
             console.log('💡 MathQuill 已加载，跳过预加载');
             callback();
             return;
         }
         
-        // MathQuill 未加载，插入一个极小的公式触发加载
+        // MathQuill 未加载，插入极简公式触发加载
         console.log('🔄 MathQuill 未加载，正在预加载...');
         
         try{
-            // 插入一个极简公式：单个字母 x
-            // 使用 UMEditor 的公式插入命令（会触发 MathQuill 对话框的加载）
             editor.execCommand('formula', 'x');
             
-            // 等待 MathQuill 加载完成
             var checkCount = 0;
             var maxChecks = 20; // 最多等待 2 秒
             
             var checkInterval = setInterval(function(){
                 checkCount++;
                 
-                if(isMathQuillLoaded()){
+                if(findMathQuillWindow()){
                     clearInterval(checkInterval);
                     console.log('✅ MathQuill 预加载完成');
-                    
-                    // 等待一小段时间确保 iframe 完全初始化
-                    setTimeout(function(){
-                        callback();
-                    }, 100);
+                    setTimeout(callback, 100);
                     return;
                 }
                 
@@ -685,7 +759,7 @@
             }, 100);
             
         }catch(e){
-            console.warn('预加载 MathQuill 失败，继续执行', e);
+            console.warn('预加载 MathQuill 失败', e);
             callback();
         }
     }
@@ -891,21 +965,8 @@
             
             if(mFull){
                 var token = mFull[1];
-                var latex = token;
-                
-                // 剥离定界符
-                if(token.startsWith('$$') && token.endsWith('$$')){
-                    latex = token.slice(2, -2);
-                }else if(token.indexOf('\\[') === 0 && token.slice(-2) === '\\]'){
-                    latex = token.slice(2, -2);
-                }else if(token.indexOf('\\(') === 0 && token.slice(-2) === '\\)'){
-                    latex = token.slice(2, -2);
-                }else if(token.indexOf('$') === 0 && token.slice(-1) === '$'){
-                    latex = token.slice(1, -1);
-                }
-                
-                latex = latex.trim();
-                var normalizedWhole = normalizeLatexForMathQuill(latex);
+                var stripped = stripLatexDelimiters(token);
+                var normalizedWhole = normalizeLatexForMathQuill(stripped.latex);
 
                 // 尝试 MathQuill 渲染
                 try{
@@ -937,7 +998,7 @@
                                     temp.parentNode && temp.parentNode.removeChild(temp);
                                     
                                     var errorMsg = '公式渲染失败\n\n' +
-                                        'LaTeX: ' + latex.substring(0, 100) + (latex.length > 100 ? '...' : '') + '\n' +
+                                        'LaTeX: ' + stripped.latex.substring(0, 100) + (stripped.latex.length > 100 ? '...' : '') + '\n' +
                                         '错误: ' + validation.error + '\n\n' +
                                         '这可能是因为：\n' +
                                         '1. LaTeX 命令不被 MathQuill 支持\n' +
@@ -980,55 +1041,6 @@
             }
         }catch(e){
             // 忽略并继续到混合内容路径
-        }
-
-        // ========== 辅助函数定义 ==========
-        
-        /**
-         * HTML 实体转义
-         * @param {string} s 
-         * @returns {string}
-         */
-        function escapeHtml(s){
-            return String(s)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-        }
-
-        /**
-         * 文本转 HTML 回退（简单换行处理）
-         * @param {string} s 
-         * @returns {string}
-         */
-        function textToHtmlFallback(s){
-            if(!s) return '';
-            s = String(s).replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-            var tmp = escapeHtml(s);
-            tmp = tmp.replace(/\n{2,}/g, '<br><br>');
-            tmp = tmp.replace(/\n/g, '<br>');
-            return tmp;
-        }
-
-        /**
-         * 动态加载 marked 库
-         * @returns {Promise<Object|null>}
-         */
-        function loadMarked(){
-            return new Promise(function(resolve){
-                if(window.marked) return resolve(window.marked);
-                try{
-                    var s = document.createElement('script');
-                    s.src = 'https://cdn.jsdelivr.net/npm/marked@5.1.1/marked.min.js';
-                    s.onload = function(){ resolve(window.marked || null); };
-                    s.onerror = function(){ resolve(null); };
-                    document.head.appendChild(s);
-                }catch(e){
-                    resolve(null);
-                }
-            });
         }
 
         // ========== 步骤 2：混合内容路径 ==========
@@ -1128,21 +1140,8 @@
                         // 批量验证每个 token
                         for (var i = 0; i < tokens.length; i++) {
                             var tkn = tokens[i].raw;
-                            var token = tkn;
-                            
-                            // 剥离定界符
-                            if (token.indexOf('$$') === 0 && token.lastIndexOf('$$') === token.length - 2) {
-                                token = token.slice(2, -2);
-                            } else if (token.indexOf('\\[') === 0 && token.slice(-2) === '\\]') {
-                                token = token.slice(2, -2);
-                            } else if (token.indexOf('\\(') === 0 && token.slice(-2) === '\\)') {
-                                token = token.slice(2, -2);
-                            } else if (token.indexOf('$') === 0 && token.slice(-1) === '$') {
-                                token = token.slice(1, -1);
-                            }
-                            
-                            token = token.trim();
-                            var normalized = normalizeLatexForMathQuill(token);
+                            var stripped = stripLatexDelimiters(tkn);
+                            var normalized = normalizeLatexForMathQuill(stripped.latex);
                             
                             // 创建测试 span
                             var testSpan = cw.document.createElement('span');
@@ -1156,14 +1155,16 @@
                                 $testSpan.mathquill('latex', normalized);
                                 
                                 var validation = validateMathQuillRender(testSpan, normalized);
-                                console.log('🔍 公式', i + 1, '验证结果:', validation.success ? '✅ 成功' : '❌ 失败', normalized.substring(0, 30));
+                                if(DEBUG_MODE){
+                                    console.log('🔍 公式', i + 1, '验证结果:', validation.success ? '✅ 成功' : '❌ 失败', normalized.substring(0, 30));
+                                }
                                 
                                 if (!validation.success) {
                                     failedTokens.push({
                                         index: i + 1,
                                         id: tokens[i].id,
                                         raw: tkn,
-                                        latex: token,
+                                        latex: stripped.latex,
                                         normalized: normalized,
                                         error: validation.error
                                     });
@@ -1285,28 +1286,10 @@
         // 2d. 将占位符替换为公式 HTML
         for(var i=0; i<tokens.length; i++){
             var tkn = tokens[i].raw;
-            var token = tkn;
-            var isDisplay = false;
-
-            // 判断显示/内联并剥离定界符
-            if(token.indexOf('$$') === 0 && token.lastIndexOf('$$') === token.length - 2){
-                token = token.slice(2, -2);
-                isDisplay = true;
-            }else if(token.indexOf('\\[') === 0 && token.slice(-2) === '\\]'){
-                token = token.slice(2, -2);
-                isDisplay = true;
-            }else if(token.indexOf('\\(') === 0 && token.slice(-2) === '\\)'){
-                token = token.slice(2, -2);
-                isDisplay = false;
-            }else if(token.indexOf('$') === 0 && token.slice(-1) === '$'){
-                token = token.slice(1, -1);
-                isDisplay = false;
-            }
-
-            token = token.trim();
-            var normalized = normalizeLatexForMathQuill(token);
+            var stripped = stripLatexDelimiters(tkn);
+            var normalized = normalizeLatexForMathQuill(stripped.latex);
             var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
-            var repl = isDisplay ? '<div class="math-display">' + span + '</div>' : span;
+            var repl = stripped.isDisplay ? '<div class="math-display">' + span + '</div>' : span;
             html = html.split('@@UM_LATEX_' + i + '@@').join(repl);
         }
 
