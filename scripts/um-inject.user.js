@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.20.00003
+// @version      2025.10.20.00006
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -484,9 +484,9 @@
             if(!ed) return alert('找不到编辑器实例');
             
             // 🎯 智能预加载 MathQuill（如果未加载）
-            preloadMathQuillIfNeeded(ed, function(){
+            preloadMathQuillIfNeeded(ed, function(didInsertX){
                 // MathQuill 已加载（或确认不需要加载），执行真正的插入
-                injectMixedContentToUM(ed, mixed);
+                injectMixedContentToUM(ed, mixed, didInsertX);
             });
         });
 
@@ -720,23 +720,25 @@
      * 1. 检查 MathQuill 是否已加载（通过 findMathQuillWindow）
      * 2. 如未加载，插入极简公式 'x' 触发懒加载
      * 3. 轮询等待加载完成（最多 2 秒）
+     * 4. 回调时传递是否插入了 x 的标志
      * 
      * @param {Object} editor UMEditor 实例
-     * @param {Function} callback 加载完成后的回调函数
+     * @param {Function} callback 加载完成后的回调函数，参数为 (didInsertX)
      */
     function preloadMathQuillIfNeeded(editor, callback){
         // 如果已加载，直接执行回调
         if(findMathQuillWindow()){
             console.log('💡 MathQuill 已加载，跳过预加载');
-            callback();
+            callback(false); // 没有插入 x
             return;
         }
         
-        // MathQuill 未加载，插入极简公式触发加载
+        // MathQuill 未加载，插入特殊标记公式触发加载
         console.log('🔄 MathQuill 未加载，正在预加载...');
         
         try{
-            editor.execCommand('formula', 'x');
+            // 使用特殊标记，不容易与用户公式冲突
+            editor.execCommand('formula', '\\text{UMEditorPreloadMarker}');
             
             var checkCount = 0;
             var maxChecks = 20; // 最多等待 2 秒
@@ -746,21 +748,23 @@
                 
                 if(findMathQuillWindow()){
                     clearInterval(checkInterval);
-                    console.log('✅ MathQuill 预加载完成');
-                    setTimeout(callback, 100);
+                    console.log('✅ MathQuill 预加载完成（保留标记以维持 iframe 打开）');
+                    setTimeout(function(){
+                        callback(true); // 插入了标记
+                    }, 100);
                     return;
                 }
                 
                 if(checkCount >= maxChecks){
                     clearInterval(checkInterval);
                     console.warn('⚠️ MathQuill 预加载超时，继续执行（将跳过验证）');
-                    callback();
+                    callback(false);
                 }
             }, 100);
             
         }catch(e){
             console.warn('预加载 MathQuill 失败', e);
-            callback();
+            callback(false);
         }
     }
 
@@ -947,11 +951,13 @@
      *    b. 根据 Markdown 开关决定是否用 marked 解析
      *    c. 将占位符替换为公式 HTML
      *    d. 插入到编辑器
+     *    e. 如果预加载了 x，插入完成后删除
      * 
      * @param {Object} editor UMEditor 实例
      * @param {string} mixedText 混合内容（文本 + LaTeX）
+     * @param {boolean} didInsertX 是否插入了预加载标记
      */
-    async function injectMixedContentToUM(editor, mixedText){
+    async function injectMixedContentToUM(editor, mixedText, didInsertX){
         if(!editor || !editor.execCommand){
             console.error('editor not found or invalid');
             return;
@@ -1282,6 +1288,40 @@
             
             console.log('injectMixedContentToUM -> target id=', id, 'found at', inst.where, 'src=', inst.src || '');
             inst.ed.execCommand('inserthtml', html);
+            
+            // 2f. 如果预加载时插入了标记，现在删除它
+            if(didInsertX){
+                try{
+                    setTimeout(function(){
+                        var content = inst.ed.getContent();
+                        // 查找并删除预加载标记 "UMEditorPreloadMarker"
+                        var tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = content;
+                        
+                        // 查找所有 mathquill 相关元素
+                        var mathElements = tempDiv.querySelectorAll('span.mathquill-embedded-latex, span[class*="mathquill"]');
+                        for(var i = 0; i < mathElements.length; i++){
+                            var elem = mathElements[i];
+                            var text = elem.textContent || '';
+                            // 检查是否包含预加载标记
+                            if(text.indexOf('UMEditorPreloadMarker') !== -1 || text.indexOf('UMEditorPreloadMarker') !== -1){
+                                // 删除该元素及其可能的父容器
+                                var parent = elem.parentNode;
+                                if(parent && parent.classList && parent.classList.contains('math-display')){
+                                    parent.parentNode && parent.parentNode.removeChild(parent);
+                                }else{
+                                    elem.parentNode && elem.parentNode.removeChild(elem);
+                                }
+                                inst.ed.setContent(tempDiv.innerHTML);
+                                console.log('🗑️ 已删除预加载标记');
+                                break; // 只删除第一个匹配的
+                            }
+                        }
+                    }, 200); // 延迟 200ms 确保插入完成
+                }catch(e){
+                    console.warn('删除预加载标记失败', e);
+                }
+            }
         }catch(e){
             console.error('inserthtml failed', e);
             alert('插入失败: ' + (e && e.message ? e.message : e));
