@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.20.00001
+// @version      2025.10.20.00003
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -994,24 +994,15 @@
                                 var validation = validateMathQuillRender(temp, normalizedWhole);
                                 
                                 if (!validation.success) {
-                                    // 渲染失败，清理并显示错误
+                                    // 渲染失败，清理并直接输出公式文本（带定界符）
                                     temp.parentNode && temp.parentNode.removeChild(temp);
                                     
-                                    var errorMsg = '公式渲染失败\n\n' +
-                                        'LaTeX: ' + stripped.latex.substring(0, 100) + (stripped.latex.length > 100 ? '...' : '') + '\n' +
-                                        '错误: ' + validation.error + '\n\n' +
-                                        '这可能是因为：\n' +
-                                        '1. LaTeX 命令不被 MathQuill 支持\n' +
-                                        '2. 语法错误\n' +
-                                        '3. 使用了高级功能（如 \\mathbb 的部分参数）\n\n' +
-                                        '是否尝试用 UMEditor 原生公式插件插入？';
+                                    console.warn('🔍 单公式渲染失败:', validation.error, '将输出公式文本');
                                     
-                                    if (confirm(errorMsg)) {
-                                        // 回退到 execCommand('formula')
-                                        var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
-                                        if (targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function') {
-                                            targetInst.ed.execCommand('formula', normalizedWhole);
-                                        }
+                                    // 直接输出公式文本（带定界符）
+                                    var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
+                                    if (targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function') {
+                                        targetInst.ed.execCommand('inserthtml', escapeHtml(token));
                                     }
                                     return;
                                 }
@@ -1194,40 +1185,9 @@
             }
         }
 
-        // 2a-3. 如果有失败的公式，询问用户
+        // 2a-3. 记录失败的公式（仅用于日志，不弹窗）
         if (failedTokens.length > 0) {
-            var failureReport = '检测到 ' + failedTokens.length + ' 个公式无法正确渲染：\n\n';
-            
-            for (var i = 0; i < Math.min(failedTokens.length, 5); i++) {
-                var f = failedTokens[i];
-                failureReport += '【公式 ' + f.index + '】\n';
-                failureReport += 'LaTeX: ' + f.latex.substring(0, 60) + (f.latex.length > 60 ? '...' : '') + '\n';
-                failureReport += '错误: ' + f.error + '\n\n';
-            }
-            
-            if (failedTokens.length > 5) {
-                failureReport += '...以及其他 ' + (failedTokens.length - 5) + ' 个公式\n\n';
-            }
-            
-            failureReport += '可能原因：\n' +
-                '• LaTeX 命令不被 MathQuill 支持\n' +
-                '• 语法错误或缺少必要的定界符\n' +
-                '• 使用了高级功能（如部分 \\mathbb 参数、复杂矩阵等）\n\n';
-            
-            if (failedTokens.length === tokens.length) {
-                // 全部失败
-                failureReport += '所有公式都无法渲染，是否仍要继续插入？';
-                if (!confirm(failureReport)) {
-                    return; // 取消插入
-                }
-            } else {
-                // 部分失败
-                failureReport += '是否继续插入（失败的公式将显示为空白）？\n' +
-                    '点击"确定"继续，"取消"放弃插入。';
-                if (!confirm(failureReport)) {
-                    return; // 取消插入
-                }
-            }
+            console.warn('🔍 检测到', failedTokens.length, '个公式无法正确渲染，将以文本形式输出');
         }
 
         // 2b. 根据复选框决定是否启用 Markdown
@@ -1283,13 +1243,32 @@
             // 忽略
         }
 
-        // 2d. 将占位符替换为公式 HTML
+        // 2d. 将占位符替换为公式 HTML（失败的公式输出文本形式）
         for(var i=0; i<tokens.length; i++){
             var tkn = tokens[i].raw;
-            var stripped = stripLatexDelimiters(tkn);
-            var normalized = normalizeLatexForMathQuill(stripped.latex);
-            var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
-            var repl = stripped.isDisplay ? '<div class="math-display">' + span + '</div>' : span;
+            var tokenId = tokens[i].id;
+            
+            // 检查该公式是否验证失败
+            var isFailed = false;
+            for(var j=0; j<failedTokens.length; j++){
+                if(failedTokens[j].id === tokenId){
+                    isFailed = true;
+                    break;
+                }
+            }
+            
+            var repl;
+            if(isFailed){
+                // 验证失败：直接输出公式文本（带定界符）
+                repl = escapeHtml(tkn);
+            }else{
+                // 验证成功或未验证：正常输出 MathQuill HTML
+                var stripped = stripLatexDelimiters(tkn);
+                var normalized = normalizeLatexForMathQuill(stripped.latex);
+                var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
+                repl = stripped.isDisplay ? '<div class="math-display">' + span + '</div>' : span;
+            }
+            
             html = html.split('@@UM_LATEX_' + i + '@@').join(repl);
         }
 
