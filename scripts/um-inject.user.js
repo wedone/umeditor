@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.20.00006
+// @version      2025.10.21.00016
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -20,6 +20,15 @@
     
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
+    
+    /**
+     * 图床配置
+     * 使用 UAPIS.CN 免费图床服务
+     */
+    var IMAGE_HOST_CONFIG = {
+        // 是否启用图床上传（false 则回退到 base64）
+        enableUpload: true
+    };
     
     /**
      * 主题颜色配置（基于橙果色 #ff6000 的暗色调整）
@@ -133,6 +142,236 @@
                 resolve(null);
             }
         });
+    }
+
+    /**
+     * 动态加载 KaTeX 库
+     * @returns {Promise<Object|null>}
+     */
+    function loadKaTeX(){
+        return new Promise(function(resolve){
+            if(window.katex) return resolve(window.katex);
+            
+            // 加载 KaTeX CSS
+            if(!document.querySelector('link[href*="katex"]')){
+                try{
+                    var link = document.createElement('link');
+                    link.rel = 'stylesheet';
+                    link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+                    document.head.appendChild(link);
+                }catch(e){
+                    console.warn('KaTeX CSS 加载失败', e);
+                }
+            }
+            
+            // 加载 KaTeX JS
+            try{
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js';
+                s.onload = function(){ 
+                    console.log('✅ KaTeX 加载成功');
+                    resolve(window.katex || null); 
+                };
+                s.onerror = function(){ 
+                    console.warn('⚠️ KaTeX 加载失败');
+                    resolve(null); 
+                };
+                document.head.appendChild(s);
+            }catch(e){
+                console.warn('KaTeX 脚本加载异常', e);
+                resolve(null);
+            }
+        });
+    }
+
+    /**
+     * 动态加载 html2canvas 库
+     * @returns {Promise<Object|null>}
+     */
+    function loadHtml2Canvas(){
+        return new Promise(function(resolve){
+            if(window.html2canvas) return resolve(window.html2canvas);
+            try{
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+                s.onload = function(){ 
+                    console.log('✅ html2canvas 加载成功');
+                    resolve(window.html2canvas || null); 
+                };
+                s.onerror = function(){ 
+                    console.warn('⚠️ html2canvas 加载失败');
+                    resolve(null); 
+                };
+                document.head.appendChild(s);
+            }catch(e){
+                console.warn('html2canvas 脚本加载异常', e);
+                resolve(null);
+            }
+        });
+    }
+
+    /**
+     * 上传 base64 图片到 UAPIS.CN 图床
+     * 
+     * @param {string} base64Data base64 图片数据（包含 data:image/png;base64, 前缀）
+     * @returns {Promise<string|null>} 返回图片 URL，失败返回 null
+     */
+    async function uploadBase64ToImageHost(base64Data){
+        if(!base64Data || !IMAGE_HOST_CONFIG.enableUpload){
+            return null;
+        }
+        
+        try{
+            console.log('📤 上传图片到 UAPIS.CN ...');
+            
+            var response = await fetch('https://uapis.cn/api/v1/image/frombase64', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    imageData: base64Data
+                })
+            });
+            
+            if(!response.ok){
+                throw new Error('HTTP ' + response.status);
+            }
+            
+            var result = await response.json();
+            
+            // 响应格式：{ code: 200, image_url: "https://...", msg: "success" }
+            if(result && result.code === 200 && result.image_url){
+                console.log('✅ 上传成功:', result.image_url);
+                return result.image_url;
+            }else{
+                var errMsg = result && result.msg ? result.msg : '未知错误';
+                throw new Error('上传失败: ' + errMsg);
+            }
+            
+        }catch(e){
+            console.error('❌ UAPIS.CN 上传失败:', e.message || e);
+            return null;
+        }
+    }
+    
+
+    /**
+     * 使用 KaTeX + html2canvas 将公式渲染为图片并上传到图床
+     * @param {string} latex 纯 LaTeX 代码（不含定界符）
+     * @param {boolean} isDisplay 是否为显示模式（块级公式）
+     * @returns {Promise<string|null>} 返回图片 URL（公网链接），失败返回 null
+     */
+    async function renderFormulaToImage(latex, isDisplay){
+        try{
+            // 1. 加载依赖库
+            var katex = window.katex || await loadKaTeX();
+            var html2canvas = window.html2canvas || await loadHtml2Canvas();
+            
+            if(!katex || !html2canvas){
+                console.warn('KaTeX 或 html2canvas 未加载，跳过图片渲染');
+                return null;
+            }
+            
+            // 2. 创建临时容器
+            var container = document.createElement('div');
+            container.style.position = 'absolute';
+            container.style.left = '-9999px';
+            container.style.top = '-9999px';
+            container.style.padding = '1px';
+            container.style.background = 'transparent';
+            container.style.fontSize = isDisplay ? '17px' : '16px';
+            container.style.display = 'inline-block';
+            document.body.appendChild(container);
+            
+            // 3. 使用 KaTeX 渲染
+            try{
+                katex.render(latex, container, {
+                    displayMode: isDisplay,
+                    throwOnError: false,
+                    strict: false,
+                    trust: true
+                });
+            }catch(e){
+                console.warn('KaTeX 渲染失败:', e.message);
+                document.body.removeChild(container);
+                return null;
+            }
+            
+            // 4. 检查渲染结果是否为空
+            if(!container.textContent || container.textContent.trim().length === 0){
+                console.warn('KaTeX 渲染结果为空');
+                document.body.removeChild(container);
+                return null;
+            }
+            
+            // 5. 等待字体加载（KaTeX 字体可能需要时间）
+            await new Promise(function(resolve){ setTimeout(resolve, 100); });
+            
+            // 6. 转换为 base64 图片（记录原始尺寸用于 CSS 缩放）
+            var canvas = null;
+            var dataUrl = null;
+            var originalWidth = 0;
+            var originalHeight = 0;
+            try{
+                // 记录容器的原始尺寸（1x 大小）
+                var rect = container.getBoundingClientRect();
+                originalWidth = Math.round(rect.width);
+                originalHeight = Math.round(rect.height);
+                
+                canvas = await html2canvas(container, {
+                    backgroundColor: 'transparent',
+                    scale: 2, // 1倍分辨率
+                    logging: false,
+                    useCORS: true, // 允许跨域图片
+                    allowTaint: true // 允许跨域污染 canvas
+                });
+                
+                if(canvas){
+                    dataUrl = canvas.toDataURL('image/png');
+                }
+            }catch(e){
+                console.warn('html2canvas 转换失败:', e.message);
+                document.body.removeChild(container);
+                return null;
+            }
+            
+            // 7. 清理临时容器
+            document.body.removeChild(container);
+            
+            if(!dataUrl){
+                console.warn('生成 base64 数据失败');
+                return null;
+            }
+            
+            // 8. 上传到图床获取公网链接（返回带尺寸信息的对象）
+            var filename = 'katex_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.png';
+            var imageUrl = await uploadBase64ToImageHost(dataUrl, filename);
+            
+            if(imageUrl){
+                if(DEBUG_MODE){
+                    console.log('✅ 公式渲染并上传成功:', latex.substring(0, 30), '→', imageUrl);
+                }
+                // 返回带尺寸信息的对象
+                return {
+                    url: imageUrl,
+                    width: originalWidth,
+                    height: originalHeight
+                };
+            }else{
+                console.warn('⚠️ 图片上传失败，将使用 base64（可能导致保存问题）');
+                // base64 回退也返回对象格式
+                return {
+                    url: dataUrl,
+                    width: originalWidth,
+                    height: originalHeight
+                };
+            }
+            
+        }catch(e){
+            console.error('renderFormulaToImage 异常:', e);
+            return null;
+        }
     }
 
     /**
@@ -287,6 +526,8 @@
 
     /**
      * 处理粘贴到 textarea 的逻辑（先清空，再从剪贴板读取）
+     * 支持多种剪贴板访问方式，兼容权限策略限制
+     * 
      * @param {HTMLTextAreaElement} textarea 目标文本框
      */
     function handlePasteToTextarea(textarea){
@@ -295,36 +536,109 @@
         // 清空输入框
         try{ textarea.value = ''; }catch(e){}
 
-        // 尝试从剪贴板读取
-        if(navigator.clipboard && typeof navigator.clipboard.readText === 'function'){
-            navigator.clipboard.readText().then(function(text){
-                try{
-                    // 尝试插入到光标位置（需要 insertAtCursor 函数，如不存在则直接赋值）
-                    if(typeof insertAtCursor === 'function'){
-                        insertAtCursor(textarea, text);
-                    }else{
-                        textarea.value = text;
-                    }
-                }catch(e){
+        /**
+         * 方法 1: 尝试使用 Clipboard API（可能被权限策略阻止）
+         */
+        function tryClipboardAPI(){
+            if(!navigator.clipboard || typeof navigator.clipboard.readText !== 'function'){
+                return Promise.reject(new Error('Clipboard API 不可用'));
+            }
+            
+            return navigator.clipboard.readText()
+                .then(function(text){
                     textarea.value = text;
-                }
-            }).catch(function(err){
-                console.warn('clipboard.readText failed', err);
-                // 回退到 prompt
+                    return true;
+                })
+                .catch(function(err){
+                    // 被权限策略阻止或用户拒绝
+                    console.warn('Clipboard API 失败:', err.message || err);
+                    return Promise.reject(err);
+                });
+        }
+
+        /**
+         * 方法 2: 使用 execCommand('paste') + paste 事件监听（兼容性更好）
+         */
+        function tryExecCommandPaste(){
+            return new Promise(function(resolve, reject){
+                var handled = false;
+                
+                // 监听 paste 事件
+                var onPaste = function(e){
+                    handled = true;
+                    textarea.removeEventListener('paste', onPaste);
+                    
+                    try{
+                        var clipboardData = e.clipboardData || window.clipboardData;
+                        if(clipboardData){
+                            var text = clipboardData.getData('text/plain') || clipboardData.getData('text');
+                            if(text){
+                                e.preventDefault();
+                                textarea.value = text;
+                                resolve(true);
+                                return;
+                            }
+                        }
+                    }catch(err){
+                        console.warn('paste 事件处理失败:', err);
+                    }
+                    
+                    reject(new Error('无法从 paste 事件获取数据'));
+                };
+                
+                textarea.addEventListener('paste', onPaste);
+                textarea.focus();
+                
+                // 尝试触发粘贴
                 try{
-                    textarea.value = window.prompt('无法直接读取剪贴板，请粘贴到此处并回车：') || '';
-                }catch(e){
-                    textarea.value = '';
+                    var success = document.execCommand('paste');
+                    if(!success){
+                        textarea.removeEventListener('paste', onPaste);
+                        reject(new Error('execCommand paste 失败'));
+                    }else{
+                        // 等待事件触发
+                        setTimeout(function(){
+                            textarea.removeEventListener('paste', onPaste);
+                            if(!handled){
+                                reject(new Error('paste 事件未触发'));
+                            }
+                        }, 500);
+                    }
+                }catch(err){
+                    textarea.removeEventListener('paste', onPaste);
+                    reject(err);
                 }
             });
-        }else{
-            // 浏览器不支持 clipboard API，使用 prompt
+        }
+
+        /**
+         * 方法 3: 回退到 prompt 手动粘贴
+         */
+        function fallbackToPrompt(){
             try{
-                textarea.value = window.prompt('无法直接读取剪贴板，请粘贴到此处并回车：') || '';
+                var text = window.prompt('剪贴板访问受限，请手动粘贴内容（Ctrl+V）：') || '';
+                textarea.value = text;
+                return Promise.resolve(true);
             }catch(e){
                 textarea.value = '';
+                return Promise.reject(e);
             }
         }
+
+        // 依次尝试各种方法
+        tryClipboardAPI()
+            .catch(function(){
+                // Clipboard API 失败，尝试 execCommand
+                return tryExecCommandPaste();
+            })
+            .catch(function(){
+                // execCommand 也失败，回退到 prompt
+                return fallbackToPrompt();
+            })
+            .catch(function(err){
+                console.error('所有粘贴方法均失败:', err);
+                alert('粘贴失败，请手动复制内容到输入框');
+            });
     }
 
     // ========================================
@@ -909,34 +1223,34 @@
         // 压缩连续空白
         s = s.replace(/\s{2,}/g, ' ');
 
-        // 处理 mhchem 的 \ce{...}（支持嵌套大括号）
-        // 策略：找到 \ce{，然后用深度计数匹配到对应的 }，保留内部内容并用大括号包裹
-        s = (function(str){
-            var out = '';
-            var i = 0;
-            while(i < str.length){
-                var p = str.indexOf('\\ce{', i);
-                if(p === -1){
-                    out += str.slice(i);
-                    break;
-                }
-                out += str.slice(i, p);
-                var j = p + 4; // 跳过 '\ce{'
-                var depth = 1;
-                while(j < str.length && depth > 0){
-                    if(str[j] === '{') depth++;
-                    else if(str[j] === '}') depth--;
-                    j++;
-                }
-                var inner = str.slice(p + 4, Math.max(p + 4, j - 1));
-                out += '{' + inner + '}';
-                i = j;
-            }
-            return out;
-        })(s);
+        // // 处理 mhchem 的 \ce{...}（支持嵌套大括号）
+        // // 策略：找到 \ce{，然后用深度计数匹配到对应的 }，保留内部内容并用大括号包裹
+        // s = (function(str){
+        //     var out = '';
+        //     var i = 0;
+        //     while(i < str.length){
+        //         var p = str.indexOf('\\ce{', i);
+        //         if(p === -1){
+        //             out += str.slice(i);
+        //             break;
+        //         }
+        //         out += str.slice(i, p);
+        //         var j = p + 4; // 跳过 '\ce{'
+        //         var depth = 1;
+        //         while(j < str.length && depth > 0){
+        //             if(str[j] === '{') depth++;
+        //             else if(str[j] === '}') depth--;
+        //             j++;
+        //         }
+        //         var inner = str.slice(p + 4, Math.max(p + 4, j - 1));
+        //         out += '{' + inner + '}';
+        //         i = j;
+        //     }
+        //     return out;
+        // })(s);
 
-        // \xlongequal{...} -> =
-        s = s.replace(/\\xlongequal\{[^}]*\}/g, '=');
+        // // \xlongequal{...} -> =
+        // s = s.replace(/\\xlongequal\{[^}]*\}/g, '=');
 
         return s;
     }
@@ -1249,33 +1563,53 @@
             // 忽略
         }
 
-        // 2d. 将占位符替换为公式 HTML（失败的公式输出文本形式）
+        // 2d. 将占位符替换为公式 HTML（失败的公式尝试渲染为图片）
+        // 使用 for 循环 + await 确保顺序处理（避免并发导致的问题）
         for(var i=0; i<tokens.length; i++){
-            var tkn = tokens[i].raw;
-            var tokenId = tokens[i].id;
-            
-            // 检查该公式是否验证失败
-            var isFailed = false;
-            for(var j=0; j<failedTokens.length; j++){
-                if(failedTokens[j].id === tokenId){
-                    isFailed = true;
-                    break;
+            // 使用 IIFE 创建独立作用域，避免闭包捕获问题
+            await (async function(index){
+                var tkn = tokens[index].raw;
+                var tokenId = tokens[index].id;
+                
+                // 检查该公式是否验证失败
+                var isFailed = false;
+                for(var j=0; j<failedTokens.length; j++){
+                    if(failedTokens[j].id === tokenId){
+                        isFailed = true;
+                        break;
+                    }
                 }
-            }
-            
-            var repl;
-            if(isFailed){
-                // 验证失败：直接输出公式文本（带定界符）
-                repl = escapeHtml(tkn);
-            }else{
-                // 验证成功或未验证：正常输出 MathQuill HTML
-                var stripped = stripLatexDelimiters(tkn);
-                var normalized = normalizeLatexForMathQuill(stripped.latex);
-                var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
-                repl = stripped.isDisplay ? '<div class="math-display">' + span + '</div>' : span;
-            }
-            
-            html = html.split('@@UM_LATEX_' + i + '@@').join(repl);
+                
+                var repl;
+                if(isFailed){
+                    // 验证失败：尝试用 KaTeX 渲染为图片并上传
+                    var stripped = stripLatexDelimiters(tkn);
+                    var imgResult = await renderFormulaToImage(stripped.latex, stripped.isDisplay);
+                    
+                    if(imgResult && imgResult.url){
+                        // 成功获取图片 URL（可能是公网链接或 base64）
+                        // 使用原始尺寸作为 CSS width/height，保证 2x 图片按 1x 显示
+                        var imgTag = '<img src="' + imgResult.url + '" alt="' + escapeHtml(stripped.latex) + '" ' +
+                                     'width="' + imgResult.width + '" height="' + imgResult.height + '" ' +
+                                     'style="vertical-align:middle;max-width:100%;" />';
+                        repl = stripped.isDisplay ? '<div style="text-align:center;margin:10px 0;">' + imgTag + '</div>' : imgTag;
+                        console.log('✅ 公式', index+1, '已渲染为图片 (' + imgResult.width + 'x' + imgResult.height + 'px)');
+                    }else{
+                        // 图片渲染失败：回退到纯文本（带定界符）
+                        repl = escapeHtml(tkn);
+                        console.warn('⚠️ 公式', index+1, '渲染为图片失败，输出纯文本');
+                    }
+                }else{
+                    // 验证成功或未验证：正常输出 MathQuill HTML
+                    var stripped = stripLatexDelimiters(tkn);
+                    var normalized = normalizeLatexForMathQuill(stripped.latex);
+                    var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
+                    repl = stripped.isDisplay ? '<div class="math-display">' + span + '</div>' : span;
+                }
+                
+                // 立即替换当前占位符（避免延迟替换导致的变量污染）
+                html = html.split('@@UM_LATEX_' + index + '@@').join(repl);
+            })(i); // 传递当前索引，创建独立作用域
         }
 
         // 2e. 插入到编辑器
