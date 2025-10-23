@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.21.00016
+// @version      2025.10.21.00017
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -17,10 +17,10 @@
     // ========================================
     // 配置模块
     // ========================================
-    
+
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
-    
+
     /**
      * 图床配置
      * 使用 UAPIS.CN 免费图床服务
@@ -29,7 +29,7 @@
         // 是否启用图床上传（false 则回退到 base64）
         enableUpload: true
     };
-    
+
     /**
      * 主题颜色配置（基于橙果色 #ff6000 的暗色调整）
      */
@@ -43,7 +43,7 @@
     // ========================================
     // 工具函数模块
     // ========================================
-    
+
     /**
      * 查找包含 MathQuill 的窗口（主窗口或 iframe）
      * @returns {{window: Window, jQuery: Object}|null} 返回包含 MathQuill 的窗口及其 jQuery 对象
@@ -54,7 +54,7 @@
             if(DEBUG_MODE) console.log('🔍 MathQuill 找到：主窗口');
             return {window: window, jQuery: window.jQuery};
         }
-        
+
         // 检查所有 iframe
         var iframes = document.getElementsByTagName('iframe');
         for(var i = 0; i < iframes.length; i++){
@@ -70,7 +70,7 @@
         }
         return null;
     }
-    
+
     /**
      * 剥离 LaTeX 定界符，返回纯 LaTeX 和显示模式标志
      * @param {string} token 带定界符的 LaTeX 字符串
@@ -79,7 +79,7 @@
     function stripLatexDelimiters(token){
         var latex = token;
         var isDisplay = false;
-        
+
         if(token.indexOf('$$') === 0 && token.lastIndexOf('$$') === token.length - 2){
             latex = token.slice(2, -2);
             isDisplay = true;
@@ -93,13 +93,13 @@
             latex = token.slice(1, -1);
             isDisplay = false;
         }
-        
+
         return {latex: latex.trim(), isDisplay: isDisplay};
     }
-    
+
     /**
      * HTML 实体转义
-     * @param {string} s 
+     * @param {string} s
      * @returns {string}
      */
     function escapeHtml(s){
@@ -110,10 +110,10 @@
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
     }
-    
+
     /**
      * 文本转 HTML 回退（简单换行处理）
-     * @param {string} s 
+     * @param {string} s
      * @returns {string}
      */
     function textToHtmlFallback(s){
@@ -124,7 +124,7 @@
         tmp = tmp.replace(/\n/g, '<br>');
         return tmp;
     }
-    
+
     /**
      * 动态加载 marked 库
      * @returns {Promise<Object|null>}
@@ -151,7 +151,7 @@
     function loadKaTeX(){
         return new Promise(function(resolve){
             if(window.katex) return resolve(window.katex);
-            
+
             // 加载 KaTeX CSS
             if(!document.querySelector('link[href*="katex"]')){
                 try{
@@ -163,18 +163,18 @@
                     console.warn('KaTeX CSS 加载失败', e);
                 }
             }
-            
+
             // 加载 KaTeX JS
             try{
                 var s = document.createElement('script');
                 s.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js';
-                s.onload = function(){ 
+                s.onload = function(){
                     console.log('✅ KaTeX 加载成功');
-                    resolve(window.katex || null); 
+                    resolve(window.katex || null);
                 };
-                s.onerror = function(){ 
+                s.onerror = function(){
                     console.warn('⚠️ KaTeX 加载失败');
-                    resolve(null); 
+                    resolve(null);
                 };
                 document.head.appendChild(s);
             }catch(e){
@@ -194,13 +194,13 @@
             try{
                 var s = document.createElement('script');
                 s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
-                s.onload = function(){ 
+                s.onload = function(){
                     console.log('✅ html2canvas 加载成功');
-                    resolve(window.html2canvas || null); 
+                    resolve(window.html2canvas || null);
                 };
-                s.onerror = function(){ 
+                s.onerror = function(){
                     console.warn('⚠️ html2canvas 加载失败');
-                    resolve(null); 
+                    resolve(null);
                 };
                 document.head.appendChild(s);
             }catch(e){
@@ -212,7 +212,7 @@
 
     /**
      * 上传 base64 图片到 UAPIS.CN 图床
-     * 
+     *
      * @param {string} base64Data base64 图片数据（包含 data:image/png;base64, 前缀）
      * @returns {Promise<string|null>} 返回图片 URL，失败返回 null
      */
@@ -220,10 +220,10 @@
         if(!base64Data || !IMAGE_HOST_CONFIG.enableUpload){
             return null;
         }
-        
+
         try{
             console.log('📤 上传图片到 UAPIS.CN ...');
-            
+
             var response = await fetch('https://uapis.cn/api/v1/image/frombase64', {
                 method: 'POST',
                 headers: {
@@ -233,13 +233,13 @@
                     imageData: base64Data
                 })
             });
-            
+
             if(!response.ok){
                 throw new Error('HTTP ' + response.status);
             }
-            
+
             var result = await response.json();
-            
+
             // 响应格式：{ code: 200, image_url: "https://...", msg: "success" }
             if(result && result.code === 200 && result.image_url){
                 console.log('✅ 上传成功:', result.image_url);
@@ -248,13 +248,13 @@
                 var errMsg = result && result.msg ? result.msg : '未知错误';
                 throw new Error('上传失败: ' + errMsg);
             }
-            
+
         }catch(e){
             console.error('❌ UAPIS.CN 上传失败:', e.message || e);
             return null;
         }
     }
-    
+
 
     /**
      * 使用 KaTeX + html2canvas 将公式渲染为图片并上传到图床
@@ -267,12 +267,12 @@
             // 1. 加载依赖库
             var katex = window.katex || await loadKaTeX();
             var html2canvas = window.html2canvas || await loadHtml2Canvas();
-            
+
             if(!katex || !html2canvas){
                 console.warn('KaTeX 或 html2canvas 未加载，跳过图片渲染');
                 return null;
             }
-            
+
             // 2. 创建临时容器
             var container = document.createElement('div');
             container.style.position = 'absolute';
@@ -283,7 +283,7 @@
             container.style.fontSize = isDisplay ? '17px' : '16px';
             container.style.display = 'inline-block';
             document.body.appendChild(container);
-            
+
             // 3. 使用 KaTeX 渲染
             try{
                 katex.render(latex, container, {
@@ -297,17 +297,17 @@
                 document.body.removeChild(container);
                 return null;
             }
-            
+
             // 4. 检查渲染结果是否为空
             if(!container.textContent || container.textContent.trim().length === 0){
                 console.warn('KaTeX 渲染结果为空');
                 document.body.removeChild(container);
                 return null;
             }
-            
+
             // 5. 等待字体加载（KaTeX 字体可能需要时间）
             await new Promise(function(resolve){ setTimeout(resolve, 100); });
-            
+
             // 6. 转换为 base64 图片（记录原始尺寸用于 CSS 缩放）
             var canvas = null;
             var dataUrl = null;
@@ -318,7 +318,7 @@
                 var rect = container.getBoundingClientRect();
                 originalWidth = Math.round(rect.width);
                 originalHeight = Math.round(rect.height);
-                
+
                 canvas = await html2canvas(container, {
                     backgroundColor: 'transparent',
                     scale: 2, // 1倍分辨率
@@ -326,7 +326,7 @@
                     useCORS: true, // 允许跨域图片
                     allowTaint: true // 允许跨域污染 canvas
                 });
-                
+
                 if(canvas){
                     dataUrl = canvas.toDataURL('image/png');
                 }
@@ -335,19 +335,19 @@
                 document.body.removeChild(container);
                 return null;
             }
-            
+
             // 7. 清理临时容器
             document.body.removeChild(container);
-            
+
             if(!dataUrl){
                 console.warn('生成 base64 数据失败');
                 return null;
             }
-            
+
             // 8. 上传到图床获取公网链接（返回带尺寸信息的对象）
             var filename = 'katex_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.png';
             var imageUrl = await uploadBase64ToImageHost(dataUrl, filename);
-            
+
             if(imageUrl){
                 if(DEBUG_MODE){
                     console.log('✅ 公式渲染并上传成功:', latex.substring(0, 30), '→', imageUrl);
@@ -367,7 +367,7 @@
                     height: originalHeight
                 };
             }
-            
+
         }catch(e){
             console.error('renderFormulaToImage 异常:', e);
             return null;
@@ -381,15 +381,15 @@
      * 2. 过滤掉面板本身的 DOM
      * 3. 优先验证能否通过 getEditorInstanceById 获取可用实例
      * 4. 回退到首个候选 ID 或 'myEditor'
-     * 
+     *
      * @returns {string} 编辑器 ID
      */
     function detectEditorId(){
         var panel = document.getElementById('um-inject-panel');
-        
+
         /**
          * 判断节点是否在面板内部
-         * @param {HTMLElement} node 
+         * @param {HTMLElement} node
          * @returns {boolean}
          */
         function insidePanel(node){
@@ -405,7 +405,7 @@
 
         /**
          * 添加候选 ID（去重且排除面板内元素）
-         * @param {string} id 
+         * @param {string} id
          */
         function pushId(id){
             if(!id || seen[id]) return;
@@ -484,7 +484,7 @@
     /**
      * 根据 ID 在当前 window 或同源 iframe 中获取 UM 编辑器实例
      * 支持跨 iframe 查找（同源限制）
-     * 
+     *
      * @param {string} id 编辑器 ID
      * @returns {Object|null} {ed: 编辑器实例, win: 所在 window, where: 'top'|'iframe', src: iframe源}
      */
@@ -527,12 +527,12 @@
     /**
      * 处理粘贴到 textarea 的逻辑（先清空，再从剪贴板读取）
      * 支持多种剪贴板访问方式，兼容权限策略限制
-     * 
+     *
      * @param {HTMLTextAreaElement} textarea 目标文本框
      */
     function handlePasteToTextarea(textarea){
         if(!textarea) return alert('找不到输入框');
-        
+
         // 清空输入框
         try{ textarea.value = ''; }catch(e){}
 
@@ -543,7 +543,7 @@
             if(!navigator.clipboard || typeof navigator.clipboard.readText !== 'function'){
                 return Promise.reject(new Error('Clipboard API 不可用'));
             }
-            
+
             return navigator.clipboard.readText()
                 .then(function(text){
                     textarea.value = text;
@@ -562,12 +562,12 @@
         function tryExecCommandPaste(){
             return new Promise(function(resolve, reject){
                 var handled = false;
-                
+
                 // 监听 paste 事件
                 var onPaste = function(e){
                     handled = true;
                     textarea.removeEventListener('paste', onPaste);
-                    
+
                     try{
                         var clipboardData = e.clipboardData || window.clipboardData;
                         if(clipboardData){
@@ -582,13 +582,13 @@
                     }catch(err){
                         console.warn('paste 事件处理失败:', err);
                     }
-                    
+
                     reject(new Error('无法从 paste 事件获取数据'));
                 };
-                
+
                 textarea.addEventListener('paste', onPaste);
                 textarea.focus();
-                
+
                 // 尝试触发粘贴
                 try{
                     var success = document.execCommand('paste');
@@ -723,10 +723,10 @@
 
         // 应用主题颜色
         applyThemeToPanel();
-        
+
         // 注入全局样式（border-box 修正）
         injectPanelStyles();
-        
+
         // 绑定事件
         bindPanelEvents();
     }
@@ -738,13 +738,13 @@
         try{
             var hdr = document.getElementById('um-inject-header');
             if(hdr) hdr.style.background = 'linear-gradient(90deg,'+THEME.primaryLight+','+THEME.primary+')';
-            
+
             var insertBtn = document.getElementById('um-insert-mixed');
             if(insertBtn) insertBtn.style.background = 'linear-gradient(180deg,'+THEME.primaryLight+','+THEME.primary+')';
-            
+
             var clearBtn = document.getElementById('um-clear-editor');
             if(clearBtn) clearBtn.style.background = THEME.primary;
-            
+
             var clearYes = document.getElementById('um-clear-confirm-yes');
             if(clearYes) clearYes.style.background = THEME.primary;
         }catch(e){
@@ -792,11 +792,11 @@
         document.getElementById('um-insert-mixed').addEventListener('click', function(){
             var mixed = document.getElementById('um-inject-mixed').value || '';
             if(!mixed) return alert('混合内容为空');
-            
+
             var id = detectEditorId();
             var ed = UM.getEditor(id) || UM.getEditor('myEditor');
             if(!ed) return alert('找不到编辑器实例');
-            
+
             // 🎯 智能预加载 MathQuill（如果未加载）
             preloadMathQuillIfNeeded(ed, function(didInsertX){
                 // MathQuill 已加载（或确认不需要加载），执行真正的插入
@@ -819,7 +819,7 @@
         var box = document.getElementById('um-clear-confirm');
         var yes = document.getElementById('um-clear-confirm-yes');
         var no = document.getElementById('um-clear-confirm-no');
-        
+
         if(!btn || !box || !yes || !no) return;
 
         var hideTimer = null;
@@ -880,14 +880,14 @@
         yes.addEventListener('click', function(e){
             e.stopPropagation();
             hideBox();
-            
+
             try{
                 var id = detectEditorId();
                 var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
                 if(!inst || !inst.ed){
                     return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
                 }
-                
+
                 var ed = inst.ed;
                 if(typeof ed.setContent === 'function'){
                     ed.setContent('');
@@ -918,7 +918,7 @@
         ids.forEach(function(id){
             var el = document.getElementById(id);
             if(!el) return;
-            
+
             el.style.transition = 'all 120ms ease';
             el.addEventListener('mouseenter', function(){
                 el.style.transform = 'translateY(-1px)';
@@ -944,7 +944,7 @@
         var panel = document.getElementById('um-inject-panel');
         var handle = document.getElementById('um-inject-handle');
         if(!panel || !handle) return;
-        
+
         try{
             var hr = handle.getBoundingClientRect();
             var rightPx = Math.max(8, Math.round(window.innerWidth - hr.right));
@@ -1029,13 +1029,13 @@
 
     /**
      * 智能预加载 MathQuill（如果尚未加载）
-     * 
+     *
      * 策略：
      * 1. 检查 MathQuill 是否已加载（通过 findMathQuillWindow）
      * 2. 如未加载，插入极简公式 'x' 触发懒加载
      * 3. 轮询等待加载完成（最多 2 秒）
      * 4. 回调时传递是否插入了 x 的标志
-     * 
+     *
      * @param {Object} editor UMEditor 实例
      * @param {Function} callback 加载完成后的回调函数，参数为 (didInsertX)
      */
@@ -1046,20 +1046,20 @@
             callback(false); // 没有插入 x
             return;
         }
-        
+
         // MathQuill 未加载，插入特殊标记公式触发加载
         console.log('🔄 MathQuill 未加载，正在预加载...');
-        
+
         try{
             // 使用特殊标记，不容易与用户公式冲突
             editor.execCommand('formula', '\\text{UMEditorPreloadMarker}');
-            
+
             var checkCount = 0;
             var maxChecks = 20; // 最多等待 2 秒
-            
+
             var checkInterval = setInterval(function(){
                 checkCount++;
-                
+
                 if(findMathQuillWindow()){
                     clearInterval(checkInterval);
                     console.log('✅ MathQuill 预加载完成（保留标记以维持 iframe 打开）');
@@ -1068,14 +1068,14 @@
                     }, 100);
                     return;
                 }
-                
+
                 if(checkCount >= maxChecks){
                     clearInterval(checkInterval);
                     console.warn('⚠️ MathQuill 预加载超时，继续执行（将跳过验证）');
                     callback(false);
                 }
             }, 100);
-            
+
         }catch(e){
             console.warn('预加载 MathQuill 失败', e);
             callback(false);
@@ -1084,13 +1084,13 @@
 
     /**
      * 验证 MathQuill 渲染是否成功（适配老版本 jQuery 插件）
-     * 
+     *
      * 老版本 MathQuill 不创建 .mq-root-block，直接在容器中渲染
      * 检查策略：
      * - 检查是否有 .selectable（定界符 $$）
      * - 检查是否有 mathquill-command-id 属性
      * - 检查是否有 MathQuill 特定的类名和元素
-     * 
+     *
      * @param {HTMLElement} container 渲染容器（MathQuill 实例的根元素）
      * @param {string} originalLatex 原始 LaTeX 代码（用于错误报告）
      * @returns {{success: boolean, error?: string, isEmpty?: boolean}}
@@ -1102,18 +1102,18 @@
             var hasSelectable = container.querySelector('.selectable');
             var hasCommandId = container.querySelector('[mathquill-command-id]');
             var hasMQClasses = container.querySelector('.non-leaf, .binary-operator, .fraction, .numerator, .denominator, sup, sub');
-            
+
             if (!hasSelectable && !hasCommandId && !hasMQClasses) {
                 return {
-                    success: false, 
+                    success: false,
                     error: '未找到 MathQuill 渲染结构（可能解析失败）',
                     isEmpty: true
                 };
             }
-            
+
             // 检查是否有实际的数学内容（不只是定界符）
             var mathNodes = container.querySelectorAll('var, sup, sub, .fraction, .non-leaf, .binary-operator, [mathquill-command-id]');
-            
+
             // 如果没有任何数学节点，说明渲染失败
             if (mathNodes.length === 0) {
                 return {
@@ -1122,7 +1122,7 @@
                     isEmpty: true
                 };
             }
-            
+
             // 检查渲染后的尺寸（额外验证）
             var rect = container.getBoundingClientRect();
             if (rect.width < 3 && rect.height < 3) {
@@ -1132,9 +1132,9 @@
                     isEmpty: true
                 };
             }
-            
+
             return { success: true };
-            
+
         } catch (e) {
             return {
                 success: false,
@@ -1146,14 +1146,14 @@
 
     /**
      * 对 LaTeX 代码进行归一化处理（适配 MathQuill 渲染）
-     * 
+     *
      * 处理项：
      * - 单字母 \mathbb{X} -> \X
      * - 竖线 | -> \mid
      * - 压缩多余空白
      * - 处理 mhchem 的 \ce{...}
      * - \xlongequal{...} -> =
-     * 
+     *
      * @param {string} latex 原始 LaTeX 代码
      * @returns {string} 归一化后的 LaTeX
      */
@@ -1161,6 +1161,8 @@
         if(!latex) return latex;
         var s = String(latex);
 
+        // 花括号处理（将自适应定界符还原为普通花括号）
+        s = s.replace(/\\left\\\{/g, '\\{').replace(/\\right\\\}/g, '\\}');
         // 花括号处理（避免在某些环境下使用 \left/\right 导致空白渲染）
         s = s.replace(/\\\{/g, '\\left\\{').replace(/\\\}/g, '\\right\\}');
 
@@ -1170,7 +1172,7 @@
         });
 
     // \complement 映射（补集符号）
-    s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
+    //s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
 
     // 将常见的 \not\... / 标准 LaTeX 名称直接替换为单个 Unicode 符号，
     // 以避免在后续 MathQuill 解析中被拆分为 "\\not" + "其他符号"
@@ -1216,6 +1218,8 @@
     s = s.replace(/\\notin(?=[_\s{]|$)/g, '\u2209');
     // \not\ni (用户可能输入) -> ∌ (U+220C) 但按你要求不保留 \not\... 形式；这里保留 \nni 形式映射
     s = s.replace(/\\nni(?=[_\s{]|$)/g, '\u220C');
+    // 将 \sup 转为 \text{sup } 以便 MathQuill 正确显示
+    s = s.replace(/\\sup/g, '\\text{sup }');
 
         // 竖线替换
         s = s.replace(/\|/g, '\\mid');
@@ -1223,41 +1227,14 @@
         // 压缩连续空白
         s = s.replace(/\s{2,}/g, ' ');
 
-        // // 处理 mhchem 的 \ce{...}（支持嵌套大括号）
-        // // 策略：找到 \ce{，然后用深度计数匹配到对应的 }，保留内部内容并用大括号包裹
-        // s = (function(str){
-        //     var out = '';
-        //     var i = 0;
-        //     while(i < str.length){
-        //         var p = str.indexOf('\\ce{', i);
-        //         if(p === -1){
-        //             out += str.slice(i);
-        //             break;
-        //         }
-        //         out += str.slice(i, p);
-        //         var j = p + 4; // 跳过 '\ce{'
-        //         var depth = 1;
-        //         while(j < str.length && depth > 0){
-        //             if(str[j] === '{') depth++;
-        //             else if(str[j] === '}') depth--;
-        //             j++;
-        //         }
-        //         var inner = str.slice(p + 4, Math.max(p + 4, j - 1));
-        //         out += '{' + inner + '}';
-        //         i = j;
-        //     }
-        //     return out;
-        // })(s);
 
-        // // \xlongequal{...} -> =
-        // s = s.replace(/\\xlongequal\{[^}]*\}/g, '=');
 
         return s;
     }
 
     /**
      * 注入混合内容到 UMEditor
-     * 
+     *
      * 流程：
      * 1. 单公式快速路径：若整个输入是单个公式，优先用 MathQuill 或 execCommand('formula')
      * 2. 混合内容路径：
@@ -1266,7 +1243,7 @@
      *    c. 将占位符替换为公式 HTML
      *    d. 插入到编辑器
      *    e. 如果预加载了 x，插入完成后删除
-     * 
+     *
      * @param {Object} editor UMEditor 实例
      * @param {string} mixedText 混合内容（文本 + LaTeX）
      * @param {boolean} didInsertX 是否插入了预加载标记
@@ -1282,7 +1259,7 @@
             var whole = String(mixedText || '').trim();
             var fullRe = /^(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)$/;
             var mFull = whole.match(fullRe);
-            
+
             if(mFull){
                 var token = mFull[1];
                 var stripped = stripLatexDelimiters(token);
@@ -1296,7 +1273,7 @@
                             var cw = inst.win;
                             // UMEditor 使用 jQuery 插件版本的 MathQuill
                             var $ = cw.jQuery || cw.$;
-                            
+
                             if($ && typeof $.fn.mathquill === 'function'){
                                 var temp = cw.document.createElement('span');
                                 temp.className = 'mq-temp-for-insert';
@@ -1304,21 +1281,21 @@
                                 temp.style.left = '-9999px';
                                 temp.style.visibility = 'hidden';
                                 cw.document.body.appendChild(temp);
-                                
+
                                 // 使用 jQuery 插件接口渲染
                                 var $temp = $(temp);
                                 $temp.mathquill();
                                 $temp.mathquill('latex', normalizedWhole);
-                                
+
                                 // 验证渲染是否成功
                                 var validation = validateMathQuillRender(temp, normalizedWhole);
-                                
+
                                 if (!validation.success) {
                                     // 渲染失败，清理并直接输出公式文本（带定界符）
                                     temp.parentNode && temp.parentNode.removeChild(temp);
-                                    
+
                                     console.warn('🔍 单公式渲染失败:', validation.error, '将输出公式文本');
-                                    
+
                                     // 直接输出公式文本（带定界符）
                                     var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
                                     if (targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function') {
@@ -1326,10 +1303,10 @@
                                     }
                                     return;
                                 }
-                                
+
                                 var outer = temp.outerHTML;
                                 temp.parentNode && temp.parentNode.removeChild(temp);
-                                
+
                                 var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
                                 if(targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function'){
                                     targetInst.ed.execCommand('inserthtml', outer);
@@ -1340,7 +1317,7 @@
                             console.warn('MathQuill jQuery plugin render failed or unavailable in target window', innerErr);
                         }
                     }
-                    
+
                     // 回退到 execCommand('formula')
                     if(typeof editor.execCommand === 'function'){
                         editor.execCommand('formula', normalizedWhole);
@@ -1370,20 +1347,20 @@
         var failedTokens = [];
         if (tokens.length > 0) {
             console.log('🔍 开始批量验证', tokens.length, '个公式...');
-            
+
             // 查找包含 MathQuill 的窗口（可能在 iframe 中）
             var mqWindow = null;
             var mqJQuery = null;
-            
+
             // 1. 检查主窗口
             try {
                 console.log('🔍 检查主窗口:');
                 console.log('  → jQuery 存在:', !!window.jQuery);
-                
+
                 if (window.jQuery) {
                     console.log('  → jQuery 版本:', window.jQuery.fn.jquery);
                     console.log('  → $.fn.mathquill 存在:', typeof window.jQuery.fn.mathquill);
-                    
+
                     if (typeof window.jQuery.fn.mathquill === 'function') {
                         mqWindow = window;
                         mqJQuery = window.jQuery;
@@ -1393,30 +1370,30 @@
             } catch (e) {
                 console.log('  → 检查主窗口时出错:', e.message);
             }
-            
+
             // 2. 检查所有 iframe
             if (!mqWindow) {
                 var iframes = document.getElementsByTagName('iframe');
                 console.log('🔍 检查 iframe 数量:', iframes.length);
-                
+
                 for (var idx = 0; idx < iframes.length; idx++) {
                     try {
                         var fr = iframes[idx];
                         console.log('🔍 检查 iframe', idx, ':', fr.src || fr.id || '(无标识)');
-                        
+
                         var cw = fr.contentWindow;
                         if (!cw) {
                             console.log('  → contentWindow 不可访问');
                             continue;
                         }
-                        
+
                         console.log('  → contentWindow 可访问');
                         console.log('  → jQuery 存在:', !!cw.jQuery);
-                        
+
                         if (cw.jQuery) {
                             console.log('  → jQuery 版本:', cw.jQuery.fn.jquery);
                             console.log('  → $.fn.mathquill 存在:', typeof cw.jQuery.fn.mathquill);
-                            
+
                             if (typeof cw.jQuery.fn.mathquill === 'function') {
                                 mqWindow = cw;
                                 mqJQuery = cw.jQuery;
@@ -1429,7 +1406,7 @@
                     }
                 }
             }
-            
+
             if (!mqWindow || !mqJQuery) {
                 console.warn('🔍 MathQuill jQuery 插件未加载（懒加载机制）');
                 console.info('� 提示：如需预验证公式，请先点击编辑器的"公式"按钮以加载 MathQuill');
@@ -1439,7 +1416,7 @@
                     var cw = mqWindow;
                     var $ = mqJQuery;
                     console.log('🔍 使用 MathQuill，jQuery 版本:', $.fn.jquery);
-                    
+
                     if ($ && typeof $.fn.mathquill === 'function') {
                         // 创建临时容器
                         var tempContainer = cw.document.createElement('div');
@@ -1447,29 +1424,29 @@
                         tempContainer.style.left = '-9999px';
                         tempContainer.style.visibility = 'hidden';
                         cw.document.body.appendChild(tempContainer);
-                        
+
                         // 批量验证每个 token
                         for (var i = 0; i < tokens.length; i++) {
                             var tkn = tokens[i].raw;
                             var stripped = stripLatexDelimiters(tkn);
                             var normalized = normalizeLatexForMathQuill(stripped.latex);
-                            
+
                             // 创建测试 span
                             var testSpan = cw.document.createElement('span');
                             testSpan.className = 'mq-validation-test';
                             tempContainer.appendChild(testSpan);
-                            
+
                             try {
                                 // 使用 jQuery 插件接口
                                 var $testSpan = $(testSpan);
                                 $testSpan.mathquill();
                                 $testSpan.mathquill('latex', normalized);
-                                
+
                                 var validation = validateMathQuillRender(testSpan, normalized);
                                 if(DEBUG_MODE){
                                     console.log('🔍 公式', i + 1, '验证结果:', validation.success ? '✅ 成功' : '❌ 失败', normalized.substring(0, 30));
                                 }
-                                
+
                                 if (!validation.success) {
                                     failedTokens.push({
                                         index: i + 1,
@@ -1491,10 +1468,10 @@
                                     error: '渲染异常: ' + (e.message || e)
                                 });
                             }
-                            
+
                             tempContainer.removeChild(testSpan);
                         }
-                        
+
                         // 清理临时容器
                         cw.document.body.removeChild(tempContainer);
                         console.log('🔍 批量验证完成，失败数量:', failedTokens.length);
@@ -1526,7 +1503,7 @@
             if(!mdParser){
                 mdParser = await loadMarked();
             }
-            
+
             try{
                 if(mdParser && typeof mdParser === 'function'){
                     html = mdParser(withPlaceholders);
@@ -1570,7 +1547,7 @@
             await (async function(index){
                 var tkn = tokens[index].raw;
                 var tokenId = tokens[index].id;
-                
+
                 // 检查该公式是否验证失败
                 var isFailed = false;
                 for(var j=0; j<failedTokens.length; j++){
@@ -1579,13 +1556,13 @@
                         break;
                     }
                 }
-                
+
                 var repl;
                 if(isFailed){
                     // 验证失败：尝试用 KaTeX 渲染为图片并上传
                     var stripped = stripLatexDelimiters(tkn);
                     var imgResult = await renderFormulaToImage(stripped.latex, stripped.isDisplay);
-                    
+
                     if(imgResult && imgResult.url){
                         // 成功获取图片 URL（可能是公网链接或 base64）
                         // 使用原始尺寸作为 CSS width/height，保证 2x 图片按 1x 显示
@@ -1606,7 +1583,7 @@
                     var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
                     repl = stripped.isDisplay ? '<div class="math-display">' + span + '</div>' : span;
                 }
-                
+
                 // 立即替换当前占位符（避免延迟替换导致的变量污染）
                 html = html.split('@@UM_LATEX_' + index + '@@').join(repl);
             })(i); // 传递当前索引，创建独立作用域
@@ -1619,10 +1596,10 @@
             if(!inst || !inst.ed){
                 return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
             }
-            
+
             console.log('injectMixedContentToUM -> target id=', id, 'found at', inst.where, 'src=', inst.src || '');
             inst.ed.execCommand('inserthtml', html);
-            
+
             // 2f. 如果预加载时插入了标记，现在删除它
             if(didInsertX){
                 try{
@@ -1631,7 +1608,7 @@
                         // 查找并删除预加载标记 "UMEditorPreloadMarker"
                         var tempDiv = document.createElement('div');
                         tempDiv.innerHTML = content;
-                        
+
                         // 查找所有 mathquill 相关元素
                         var mathElements = tempDiv.querySelectorAll('span.mathquill-embedded-latex, span[class*="mathquill"]');
                         for(var i = 0; i < mathElements.length; i++){
@@ -1677,7 +1654,7 @@
             }
             var panel = document.getElementById('um-inject-panel');
             panel.style.display = 'block';
-            
+
             var mixedEl = document.getElementById('um-inject-mixed');
             if(mixedEl) mixedEl.focus();
         }
