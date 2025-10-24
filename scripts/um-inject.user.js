@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.21.00017
+// @version      2025.10.21.00018
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -697,7 +697,7 @@
                     <div style="display:flex;align-items:center;justify-content:space-between;">
                         <label style="font-size:12px;color:#444;display:block;margin-bottom:6px">文本+LaTeX混合（支持 $...$ / $$...$$ / \\(...\\) / \\[...\\]）</label>
                         <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#333;margin-left:6px">
-                            <input id="um-enable-markdown" type="checkbox" checked style="width:14px;height:14px;vertical-align:middle">
+                            <input id="um-enable-markdown" type="checkbox" style="width:14px;height:14px;vertical-align:middle">
                             <span style="font-size:13px">支持 MarkDown</span>
                         </label>
                     </div>
