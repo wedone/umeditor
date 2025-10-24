@@ -1218,14 +1218,17 @@
     s = s.replace(/\\notin(?=[_\s{]|$)/g, '\u2209');
     // \not\ni (用户可能输入) -> ∌ (U+220C) 但按你要求不保留 \not\... 形式；这里保留 \nni 形式映射
     s = s.replace(/\\nni(?=[_\s{]|$)/g, '\u220C');
+
+    // 其他日常使用中错误渲染替换
+        
     // 将 \sup 转为 \text{sup } 以便 MathQuill 正确显示
     s = s.replace(/\\sup/g, '\\text{sup }');
-
-        // 竖线替换
-        s = s.replace(/\|/g, '\\mid');
-
-        // 压缩连续空白
-        s = s.replace(/\s{2,}/g, ' ');
+    // 将 \triangle 转为 \bigtriangleup 以便 MathQuill 正确显示三角形符号
+    s = s.replace(/\\triangle(?=[_\s{]|$)/g, '\\bigtriangleup');
+    // 竖线替换
+    s = s.replace(/\|/g, '\\mid');
+    // 压缩连续空白
+    s = s.replace(/\s{2,}/g, ' ');
 
 
 
