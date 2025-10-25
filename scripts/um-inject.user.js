@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.21.00018
+// @version      2025.10.21.00019
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -1172,7 +1172,7 @@
         });
 
     // \complement 映射（补集符号）
-    //s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
+    s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
 
     // 将常见的 \not\... / 标准 LaTeX 名称直接替换为单个 Unicode 符号，
     // 以避免在后续 MathQuill 解析中被拆分为 "\\not" + "其他符号"
@@ -1226,7 +1226,7 @@
     // 将 \triangle 转为 \bigtriangleup 以便 MathQuill 正确显示三角形符号
     s = s.replace(/\\triangle(?=[_\s{]|$)/g, '\\bigtriangleup');
     // 竖线替换
-    s = s.replace(/\|/g, '\\mid');
+    //s = s.replace(/\|/g, '\\mid');
     // 压缩连续空白
     s = s.replace(/\s{2,}/g, ' ');
 
@@ -1508,8 +1508,23 @@
             }
 
             try{
+                // Ensure single newlines are treated as <br> (GitHub-style line breaks)
+                try{
+                    if(mdParser && typeof mdParser.setOptions === 'function'){
+                        mdParser.setOptions({ gfm: true, breaks: true });
+                    } else if(mdParser && mdParser.defaults){
+                        mdParser.defaults = mdParser.defaults || {};
+                        mdParser.defaults.gfm = true;
+                        mdParser.defaults.breaks = true;
+                    }
+                }catch(e){
+                    // ignore options set failure
+                }
+
                 if(mdParser && typeof mdParser === 'function'){
-                    html = mdParser(withPlaceholders);
+                    // marked v4+ exports a function; prefer explicit parse when available
+                    if(typeof mdParser.parse === 'function') html = mdParser.parse(withPlaceholders);
+                    else html = mdParser(withPlaceholders);
                 }else if(mdParser && mdParser.parse){
                     html = mdParser.parse(withPlaceholders);
                 }else{
