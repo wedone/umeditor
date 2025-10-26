@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.21.00021
+// @version      8.0.23
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -216,6 +216,82 @@
     }
 
     /**
+     * 动态加载 canvg 库（用于 SVG → Canvas 转换）
+     * @returns {Promise<Object|null>}
+     */
+    function loadCanvg(){
+        return new Promise(function(resolve){
+            if(window.canvg) return resolve(window.canvg);
+            try{
+                var s = document.createElement('script');
+                s.src = 'https://cdn.jsdelivr.net/npm/canvg@3.0.10/lib/umd.js';
+                s.onload = function(){
+                    console.log('✅ canvg 加载成功');
+                    resolve(window.canvg || null);
+                };
+                s.onerror = function(){
+                    console.warn('⚠️ canvg 加载失败');
+                    resolve(null);
+                };
+                document.head.appendChild(s);
+            }catch(e){
+                console.warn('canvg 脚本加载异常', e);
+                resolve(null);
+            }
+        });
+    }
+
+    /**
+     * 将容器中的 SVG 元素转换为 Canvas（参考橙果官方逻辑）
+     * @param {HTMLElement} container 包含 SVG 的容器
+     */
+    async function svgToCanvas(container){
+        try{
+            var svgElements = container.querySelectorAll('svg');
+            if(!svgElements.length) return;
+
+            console.log('🔄 发现', svgElements.length, '个 SVG 元素，开始转换为 Canvas...');
+
+            for(var i = 0; i < svgElements.length; i++){
+                var svgNode = svgElements[i];
+                var svgString = svgNode.outerHTML;
+                
+                // 创建 Canvas 替代 SVG
+                var canvas = document.createElement('canvas');
+                var rect = svgNode.getBoundingClientRect();
+                canvas.width = rect.width || svgNode.width.baseVal.value || 100;
+                canvas.height = rect.height || svgNode.height.baseVal.value || 20;
+                
+                // 保留原始样式
+                if(svgNode.style.position) canvas.style.position = svgNode.style.position;
+                if(svgNode.style.left) canvas.style.left = svgNode.style.left;
+                if(svgNode.style.top) canvas.style.top = svgNode.style.top;
+
+                // 使用 canvg 渲染 SVG 到 Canvas
+                if(window.canvg && typeof window.canvg.Canvg !== 'undefined'){
+                    // canvg v3.x 语法
+                    var ctx = canvas.getContext('2d');
+                    var v = await window.canvg.Canvg.from(ctx, svgString);
+                    await v.render();
+                }else if(window.canvg && typeof window.canvg === 'function'){
+                    // canvg v1.x 语法（橙果使用的版本）
+                    window.canvg(canvas, svgString);
+                }else{
+                    console.warn('canvg 不可用，跳过 SVG 转换');
+                    continue;
+                }
+
+                // 替换 SVG 为 Canvas
+                svgNode.parentNode.replaceChild(canvas, svgNode);
+            }
+
+            console.log('✅ SVG → Canvas 转换完成');
+        }catch(e){
+            console.warn('⚠️ SVG 转换失败（将继续使用原始 SVG）:', e.message || e);
+        }
+    }
+
+    /**
      * 上传 base64 图片到 UAPIS.CN 图床
      *
      * @param {string} base64Data base64 图片数据（包含 data:image/png;base64, 前缀）
@@ -263,15 +339,22 @@
 
     /**
      * 使用 KaTeX + html2canvas 将公式渲染为图片并上传到图床
+     * （参考橙果官方逻辑，集成 SVG → Canvas 转换）
+     * 
      * @param {string} latex 纯 LaTeX 代码（不含定界符）
      * @param {boolean} isDisplay 是否为显示模式（块级公式）
-     * @returns {Promise<string|null>} 返回图片 URL（公网链接），失败返回 null
+     * @returns {Promise<Object|null>} 返回图片信息对象 {url, width, height}，失败返回 null
      */
     async function renderFormulaToImage(latex, isDisplay){
         try{
             // 1. 加载依赖库
             var katex = window.katex || await loadKaTeX();
             var html2canvas = window.html2canvas || await loadHtml2Canvas();
+            
+            // 🔧 新增：加载 canvg（用于 SVG 转换，提高 html2canvas 兼容性）
+            if(!window.canvg){
+                await loadCanvg();
+            }
 
             if(!katex || !html2canvas){
                 console.warn('KaTeX 或 html2canvas 未加载，跳过图片渲染');
@@ -313,6 +396,10 @@
             // 5. 等待字体加载（KaTeX 字体可能需要时间）
             await new Promise(function(resolve){ setTimeout(resolve, 100); });
 
+            // 🔧 5.5 新增：SVG → Canvas 转换（橙果官方关键步骤）
+            // 原因：html2canvas 对 SVG 的支持不完善，直接截取会丢失样式
+            await svgToCanvas(container);
+
             // 6. 转换为 base64 图片（记录原始尺寸用于 CSS 缩放）
             var canvas = null;
             var dataUrl = null;
@@ -350,7 +437,7 @@
                 return null;
             }
 
-            // 8. 上传到图床获取公网链接（返回带尺寸信息的对象）
+            // 8. 优先上传到图床（减小 HTML 体积），失败则使用 Base64（确保可用性）
             var filename = 'katex_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.png';
             var imageUrl = await uploadBase64ToImageHost(dataUrl, filename);
 
@@ -365,8 +452,8 @@
                     height: originalHeight
                 };
             }else{
-                console.warn('⚠️ 图片上传失败，将使用 base64（可能导致保存问题）');
-                // base64 回退也返回对象格式
+                console.warn('⚠️ 图片上传失败，回退到 Base64（橙果官方方案）');
+                // base64 回退也返回对象格式（与橙果官方一致）
                 return {
                     url: dataUrl,
                     width: originalWidth,
