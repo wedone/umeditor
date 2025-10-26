@@ -314,17 +314,18 @@
             var originalWidth = 0;
             var originalHeight = 0;
             try{
-                // 记录容器的原始尺寸（1x 大小）
-                var rect = container.getBoundingClientRect();
-                originalWidth = Math.round(rect.width);
-                originalHeight = Math.round(rect.height);
+                // ✨ 关键：先记录容器的 offsetWidth（CSS 视觉宽度），与橙果官方逻辑一致
+                // 这个宽度会作为 <img width="XXXpx"> 的值，后端用它来计算 Word 中的显示尺寸
+                originalWidth = container.offsetWidth;  // 使用 offsetWidth 而非 getBoundingClientRect
+                originalHeight = container.offsetHeight;
 
+                // 使用与橙果官方相同的 html2canvas 配置（1× 分辨率，无 scale）
                 canvas = await html2canvas(container, {
                     backgroundColor: 'transparent',
-                    scale: 2, // 1倍分辨率
+                    // scale: 1,  // 橙果官方未设置 scale，默认为 1（与设备像素比一致）
                     logging: false,
-                    useCORS: true, // 允许跨域图片
-                    allowTaint: true // 允许跨域污染 canvas
+                    allowTaint: true,  // 允许跨域污染 canvas（与橙果一致）
+                    taintTest: false   // 橙果官方设置，跳过污染测试
                 });
 
                 if(canvas){
