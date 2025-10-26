@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.21.00019
+// @version      2025.10.21.00020
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -1583,12 +1583,11 @@
 
                     if(imgResult && imgResult.url){
                         // 成功获取图片 URL（可能是公网链接或 base64）
-                        // 使用原始尺寸作为 CSS width/height，保证 2x 图片按 1x 显示
-                        var imgTag = '<img src="' + imgResult.url + '" alt="' + escapeHtml(stripped.latex) + '" ' +
-                                     'width="' + imgResult.width + '" height="' + imgResult.height + '" ' +
-                                     'style="vertical-align:middle;max-width:100%;" />';
+                        // ✨ 使用橙果官方格式：<img class="cg-math-formula" width="XXXpx" src="...">
+                        // 不设置 height，让浏览器和后端自动按比例显示
+                        var imgTag = '<img class="cg-math-formula" width="' + imgResult.width + 'px" src="' + imgResult.url + '" />';
                         repl = stripped.isDisplay ? '<div style="text-align:center;margin:10px 0;">' + imgTag + '</div>' : imgTag;
-                        console.log('✅ 公式', index+1, '已渲染为图片 (' + imgResult.width + 'x' + imgResult.height + 'px)');
+                        console.log('✅ 公式', index+1, '已渲染为图片（橙果格式，宽度 ' + imgResult.width + 'px）');
                     }else{
                         // 图片渲染失败：回退到纯文本（带定界符）
                         repl = escapeHtml(tkn);
