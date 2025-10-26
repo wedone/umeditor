@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      8.0.27
+// @version      8.0.28
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -423,7 +423,8 @@
                 // 使用与橙果官方相同的 html2canvas 配置（1× 分辨率，无 scale）
                 canvas = await html2canvas(container, {
                     backgroundColor: 'transparent',
-                    // scale: 1,  // 橙果官方未设置 scale，默认为 1（与设备像素比一致）
+                    fontSize: 8,       // ⭐ 橙果官方关键参数：字体缩小到 8px
+                    fontWeight: 100,   // ⭐ 橙果官方关键参数：字重 100
                     logging: false,
                     allowTaint: true,  // 允许跨域污染 canvas（与橙果一致）
                     taintTest: false   // 橙果官方设置，跳过污染测试
