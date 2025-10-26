@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      9.0.1
+// @version      9.0.2
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -19,7 +19,7 @@
     // ========================================
 
     /** 脚本版本号（从元数据中提取） */
-    var SCRIPT_VERSION = '9.0.1';
+    var SCRIPT_VERSION = '9.0.2';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -31,6 +31,30 @@
     var IMAGE_HOST_CONFIG = {
         // 是否启用图床上传（false 则回退到 base64）
         enableUpload: true
+    };
+
+    /**
+     * 公式图片尺寸控制配置
+     * 
+     * ✨ 核心原理：通过 baseFontSize 在 KaTeX 渲染时就控制公式大小
+     *    而不是渲染后缩放（避免模糊）
+     * 
+     * 使用方法：
+     * 1. 用相同公式（如 $\frac{a}{b}$）在官方编辑器和脚本中插入
+     * 2. 在浏览器开发者工具中对比生成的 <img> 标签的 width 值
+     * 3. 如果脚本图片偏大 → 减小 baseFontSize（如 '0.75em'）
+     * 4. 如果脚本图片偏小 → 增大 baseFontSize（如 '0.85em'）
+     * 
+     * 常用值参考：
+     * - '1em'   → 100%（默认大小）
+     * - '0.9em' → 90%
+     * - '0.8em' → 80%（推荐：接近橙果官方）
+     * - '0.75em' → 75%
+     * - '0.7em' → 70%（最小建议值）
+     */
+    var IMAGE_SIZE_CONFIG = {
+        baseFontSize: '0.75em',  // ✨ 控制 KaTeX 渲染时的基础字体大小
+        debugSize: false        // 是否在控制台输出尺寸调试信息
     };
 
     /**
@@ -261,9 +285,14 @@
 
     /**
      * 使用 KaTeX + html2canvas 将公式渲染为图片并上传到图床
+     * 
+     * ✨ 尺寸控制策略（详见 docs/FORMULA_IMAGE_SIZING.md）：
+     *    通过 baseFontSize 在渲染时就控制公式大小，而非事后缩放
+     *    优势：图片清晰 + 尺寸精确
+     * 
      * @param {string} latex 纯 LaTeX 代码（不含定界符）
      * @param {boolean} isDisplay 是否为显示模式（块级公式）
-     * @returns {Promise<string|null>} 返回图片 URL（公网链接），失败返回 null
+     * @returns {Promise<Object|null>} 返回 {url, width, height} 或 null
      */
     async function renderFormulaToImage(latex, isDisplay){
         try{
@@ -281,19 +310,25 @@
             container.style.position = 'absolute';
             container.style.left = '-9999px';
             container.style.top = '-9999px';
-            container.style.padding = '1px';
+            
+            // ✨ 关键：设置基础字体大小（使用配置项）
+            // 在 KaTeX 渲染时就控制尺寸，而非事后缩放（保持清晰度）
+            container.style.fontSize = IMAGE_SIZE_CONFIG.baseFontSize || '0.8em';
+            
+            // 增加 padding 防止大型公式（如 cases 环境）被裁剪
+            container.style.paddingTop = '8px';
+            container.style.paddingBottom = '8px';
+            container.style.paddingLeft = '2px';
+            container.style.paddingRight = '2px';
+            
             container.style.background = 'transparent';
-            container.style.fontSize = isDisplay ? '17px' : '16px';
-            container.style.display = 'inline-block';
             document.body.appendChild(container);
 
             // 3. 使用 KaTeX 渲染
             try{
                 katex.render(latex, container, {
                     displayMode: isDisplay,
-                    throwOnError: false,
-                    strict: false,
-                    trust: true
+                    throwOnError: false
                 });
             }catch(e){
                 console.warn('KaTeX 渲染失败:', e.message);
@@ -311,24 +346,35 @@
             // 5. 等待字体加载（KaTeX 字体可能需要时间）
             await new Promise(function(resolve){ setTimeout(resolve, 100); });
 
-            // 6. 转换为 base64 图片（使用橙果官方尺寸规范）
+            // 6. 转换为 base64 图片
             var canvas = null;
             var dataUrl = null;
             var originalWidth = 0;
             var originalHeight = 0;
             try{
-                // ✨ 关键：使用 offsetWidth/offsetHeight（CSS 视觉宽度），与橙果官方逻辑一致
-                // 这个宽度会作为 <img width="XXXpx"> 的值，后端用它来计算 Word 中的显示尺寸
+                // 获取容器尺寸（已经是正确尺寸，无需缩放）
                 originalWidth = container.offsetWidth;
                 originalHeight = container.offsetHeight;
 
-                // 使用与橙果官方相同的 html2canvas 配置（1× 分辨率，无 scale）
+                // 调试输出
+                if(IMAGE_SIZE_CONFIG.debugSize || DEBUG_MODE){
+                    console.log('📐 公式尺寸:', {
+                        latex: latex.substring(0, 30),
+                        isDisplay: isDisplay,
+                        baseFontSize: IMAGE_SIZE_CONFIG.baseFontSize,
+                        宽度: originalWidth + 'px',
+                        高度: originalHeight + 'px'
+                    });
+                }
+
+                // 使用橙果官方 html2canvas 配置
                 canvas = await html2canvas(container, {
+                    fontSize: 8,            // 控制字体渲染比例（橙果官方配置）
+                    fontWeight: 100,        // 橙果官方配置
                     backgroundColor: 'transparent',
-                    // scale: 1,  // 橙果官方未设置 scale，默认为 1（与设备像素比一致）
                     logging: false,
-                    allowTaint: true,  // 允许跨域污染 canvas（与橙果一致）
-                    taintTest: false   // 橙果官方设置，跳过污染测试
+                    allowTaint: true,
+                    taintTest: false
                 });
 
                 if(canvas){
@@ -348,7 +394,7 @@
                 return null;
             }
 
-            // 8. 上传到图床获取公网链接（返回带尺寸信息的对象）
+            // 8. 上传到图床获取公网链接
             var filename = 'katex_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9) + '.png';
             var imageUrl = await uploadBase64ToImageHost(dataUrl, filename);
 
