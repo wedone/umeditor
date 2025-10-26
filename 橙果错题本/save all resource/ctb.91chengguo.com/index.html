@@ -1,0 +1,129 @@
+<!--
+ * @Author: xkf
+ * @Date: 2021-03-05 15:54:53
+ * @LastEditTime: 2023-11-14 10:36:16
+ * @LastEditors: xkf
+ * @Description:
+-->
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="content-type" content="text/html;charset=utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"
+    />
+    <meta
+      name="keywords"
+      content="橙果 教师 老师 教师端 智能 学习方法 错题 错题本 软件 cuotiben 抄错本 高考 中考 错题宝 助学宝"
+    />
+    <meta name="description" content="橙果错题本" />
+    <link
+      rel="icon"
+      href="//www.91chengguo.com/bdf/image/logoTitle.png"
+      type="image/x-icon"
+    />
+    <link
+      rel="shortcut icon"
+      href="//www.91chengguo.com/bdf/image/logoTitle.png"
+      type="image/x-icon"
+    />
+    <link rel="stylesheet" href="index.css?v=6.1.5" type="text/css" />
+    <link
+      rel="stylesheet"
+      href="//m.91chengguo.com//cuotiben/cgEditor/katex/katex.min.css"
+    />
+    <!-- <script type="text/javascript" src='//m.91chengguo.com/cuotiben/cgEditor/katex/katex.min.js'></script> -->
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [
+            ["$", "$"],
+            ["\\(", "\\)"],
+          ],
+          displayMath: [["$$", "$$"]],
+        },
+        options: {
+          skipHtmlTags: [
+            "script",
+            "noscript",
+            "style",
+            "textarea",
+            "code",
+            "a",
+          ],
+        },
+        chtml: {
+          scale: 1.1,
+        },
+        svg: {
+          scale: 1.1,
+        },
+        startup: {
+          ready: function () {
+            window.MathJax.startup.defaultReady();
+            window.MathJax.startup.promise.then(function () {
+              console.log("MathJax initial typesetting complete");
+            });
+          },
+        },
+      };
+    </script>
+    <script src="//m.52ctb.com/externals-packet/mathjax%403.2.2/es5/tex-mml-svg.js"></script>
+    <title>橙果错题本</title>
+    <script>
+      // ctb.91chengguo.com
+      var _hmt = _hmt || [];
+      (function () {
+        var hm = document.createElement("script");
+        hm.src = "https://hm.baidu.com/hm.js?93235caf29377b9e7f02424a0b2dbf94";
+        var s = document.getElementsByTagName("script")[0];
+        s.parentNode.insertBefore(hm, s);
+      })();
+      // www.91chengguo.com
+      // var _hmt = _hmt || [];
+      // (function () {
+      //   var hm = document.createElement("script");
+      //   hm.src = "https://hm.baidu.com/hm.js?452ab8518bbfa271dded4ee69ac3b624";
+      //   var s = document.getElementsByTagName("script")[0];
+      //   s.parentNode.insertBefore(hm, s);
+      // })();
+    </script>
+    <script src="js/jquery-1.8.1.min.js"></script>
+    <script src="js/jquery-ui-1.10.4.custom.min.js"></script>
+    <script src="//res.wx.qq.com/connect/zh_CN/htmledition/js/wxLogin.js"></script>
+    <script>
+      if (typeof Object.assign != "function") {
+        Object.assign = function (target) {
+          "use strict";
+          if (target == null) {
+            throw new TypeError("Cannot convert undefined or null to object");
+          }
+
+          target = Object(target);
+          for (var index = 1; index < arguments.length; index++) {
+            var source = arguments[index];
+            if (source != null) {
+              for (var key in source) {
+                if (Object.prototype.hasOwnProperty.call(source, key)) {
+                  target[key] = source[key];
+                }
+              }
+            }
+          }
+          return target;
+        };
+      }
+    </script>
+  </head>
+
+  <body>
+    <div style="height: 100%; font-size: 12px" id="root"></div>
+  </body>
+  <script type="text/javascript" src="index.js?v=6.1.5"></script>
+  <script>
+    // document.body.style.zoom = 1.1;
+    // document.body.style.cssText += '; -moz-transform: scale(' + 1.1 + ');-moz-transform-origin: 0 0; ';
+  </script>
+</html>

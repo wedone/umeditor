@@ -1,0 +1,132 @@
+html,body{
+    /* height: 100%; */
+    height: auto;
+}
+body{
+    margin-top: 1px;
+    margin-left: 20px;
+}
+.edit-cont{
+    width: 100%;
+    /* height: 100%; */
+    height: auto;
+    margin: 0 auto;
+}
+h1{
+    font-family: "微软雅黑";
+    font-weight: normal;
+}
+h2 img{
+    height: 30px;
+}
+/*title*/
+.edit-title{
+    width: 84px;
+    height: 28px;
+    border-radius: 20px;
+    background: #707070;
+    color: #fff;
+    font-weight: 900;
+    text-align: center;
+    line-height: 28px;
+    margin-bottom: 20px;
+}
+/*????*/
+#original-img{
+    width: 60%;
+}
+/*??*/
+.edit-text{
+    /* height: 70%;
+    margin-bottom: 30px;
+    margin-top: 15px; */
+}
+#my-editor{
+    padding: 10px;
+    min-height: 200px !important;
+    /* padding-bottom: 60px; */
+}
+#my-editor img{
+    max-width: 100%;
+    vertical-align: middle;
+}
+.edui-editor-body{
+    /* overflow-y: scroll; */
+    /* height: 92%; */
+}
+.edui-container{
+    /* height: 76%; */
+}  
+.submit{
+    text-align: center;
+    position: fixed;
+    width: 100%;
+    bottom: 6px;
+    z-index: 999;
+}
+.submit button{
+    height: 40px;
+    width: 44%;
+    font-size: 18px;
+    background: #ff6000;
+    color: #fff;
+    border: 0;
+    border-radius: 20px;
+    outline: 0;
+    font-weight: 900;
+}
+.seat{
+    height: 100px;
+}
+/*??*/
+.modal-bac{
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 100%;
+    height: 100%;  
+    background: rgba(00,00,00,0.2);
+    z-index: 50000; 
+    display: none;
+}
+.modal{
+    text-align: center;
+    height: 200px;
+    width: 500px;
+    background: #fff;
+    border-radius: 20px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    margin: -100px 0 0 -250px;
+}
+.modal-header{
+    margin: 20px 0;
+    font-size: 18px;
+    font-weight: 900;
+}
+.modal-cont{
+    padding: 15px 0 30px 0;
+}   
+.modal-footer{
+    padding: 16px 0;
+}
+.modal-footer button{
+    height: 30px;
+    width: 64px;
+    background: #ff6000;
+    color: #fff;
+    border: 0;
+    border-radius: 4px;
+    outline: 0;
+    font-weight: 900;
+    font-size: 14px;
+}
+/*????*/
+.tem-save-editor{
+    position: absolute;
+    left: -100000px;
+}
+.edui-dialog-image{
+    top: 0;
+}
