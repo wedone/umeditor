@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.21.00019
+// @version      9.0.1
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -17,6 +17,9 @@
     // ========================================
     // 配置模块
     // ========================================
+
+    /** 脚本版本号（从元数据中提取） */
+    var SCRIPT_VERSION = '9.0.1';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -308,23 +311,24 @@
             // 5. 等待字体加载（KaTeX 字体可能需要时间）
             await new Promise(function(resolve){ setTimeout(resolve, 100); });
 
-            // 6. 转换为 base64 图片（记录原始尺寸用于 CSS 缩放）
+            // 6. 转换为 base64 图片（使用橙果官方尺寸规范）
             var canvas = null;
             var dataUrl = null;
             var originalWidth = 0;
             var originalHeight = 0;
             try{
-                // 记录容器的原始尺寸（1x 大小）
-                var rect = container.getBoundingClientRect();
-                originalWidth = Math.round(rect.width);
-                originalHeight = Math.round(rect.height);
+                // ✨ 关键：使用 offsetWidth/offsetHeight（CSS 视觉宽度），与橙果官方逻辑一致
+                // 这个宽度会作为 <img width="XXXpx"> 的值，后端用它来计算 Word 中的显示尺寸
+                originalWidth = container.offsetWidth;
+                originalHeight = container.offsetHeight;
 
+                // 使用与橙果官方相同的 html2canvas 配置（1× 分辨率，无 scale）
                 canvas = await html2canvas(container, {
                     backgroundColor: 'transparent',
-                    scale: 2, // 1倍分辨率
+                    // scale: 1,  // 橙果官方未设置 scale，默认为 1（与设备像素比一致）
                     logging: false,
-                    useCORS: true, // 允许跨域图片
-                    allowTaint: true // 允许跨域污染 canvas
+                    allowTaint: true,  // 允许跨域污染 canvas（与橙果一致）
+                    taintTest: false   // 橙果官方设置，跳过污染测试
                 });
 
                 if(canvas){
@@ -690,7 +694,10 @@
                     <div id="um-inject-badge" style="width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">🍊</div>
                     <strong style="font-size:14px;letter-spacing:0.2px">橙果错题助手</strong>
                 </div>
-                <button id="um-inject-close" aria-label="关闭面板" style="background:transparent;border:none;color:rgba(255,255,255,0.9);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:6px">✕</button>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span style="font-size:11px;color:rgba(255,255,255,0.75);font-family:Menlo,Consolas,monospace">v${SCRIPT_VERSION}</span>
+                    <button id="um-inject-close" aria-label="关闭面板" style="background:transparent;border:none;color:rgba(255,255,255,0.9);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:6px">✕</button>
+                </div>
             </div>
             <div style="padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,250,252,0.98));">
                 <div>
@@ -1583,12 +1590,11 @@
 
                     if(imgResult && imgResult.url){
                         // 成功获取图片 URL（可能是公网链接或 base64）
-                        // 使用原始尺寸作为 CSS width/height，保证 2x 图片按 1x 显示
-                        var imgTag = '<img src="' + imgResult.url + '" alt="' + escapeHtml(stripped.latex) + '" ' +
-                                     'width="' + imgResult.width + '" height="' + imgResult.height + '" ' +
-                                     'style="vertical-align:middle;max-width:100%;" />';
+                        // ✨ 使用橙果官方格式：<img class="cg-math-formula" width="XXXpx" src="...">
+                        // 不设置 height，让浏览器和后端自动按比例显示
+                        var imgTag = '<img class="cg-math-formula" width="' + imgResult.width + 'px" src="' + imgResult.url + '" />';
                         repl = stripped.isDisplay ? '<div style="text-align:center;margin:10px 0;">' + imgTag + '</div>' : imgTag;
-                        console.log('✅ 公式', index+1, '已渲染为图片 (' + imgResult.width + 'x' + imgResult.height + 'px)');
+                        console.log('✅ 公式', index+1, '已渲染为图片（橙果格式，宽度 ' + imgResult.width + 'px）');
                     }else{
                         // 图片渲染失败：回退到纯文本（带定界符）
                         repl = escapeHtml(tkn);
