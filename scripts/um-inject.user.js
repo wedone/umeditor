@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      8.0.25
+// @version      8.0.26
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -369,6 +369,7 @@
             container.style.padding = '1px';
             container.style.background = 'transparent';
             container.style.fontSize = isDisplay ? '17px' : '16px';
+            container.style.lineHeight = '1.2'; // 🔧 关键：设置行高，避免分段函数行距过大
             container.style.display = 'inline-block';
             document.body.appendChild(container);
 
@@ -378,7 +379,11 @@
                     displayMode: isDisplay,
                     throwOnError: false,
                     strict: false,
-                    trust: true
+                    trust: true,
+                    // 🔧 关键：设置最小行间距规则，防止分段函数行距过大
+                    minRuleThickness: 0.04,  // 最小线条粗细（em 单位）
+                    maxSize: Infinity,       // 允许任意大小
+                    maxExpand: 1000         // 允许宏展开次数
                 });
             }catch(e){
                 console.warn('KaTeX 渲染失败:', e.message);
