@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      8.0.24
+// @version      8.0.25
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -1241,14 +1241,13 @@
     }
 
     /**
-     * 对 LaTeX 代码进行归一化处理（适配 MathQuill 渲染）
+     * 对 LaTeX 代码进行归一化处理（适配 KaTeX 图片渲染）
      *
      * 处理项：
+     * - 保留 \left\{ 和 \right\}（分段函数需要）
      * - 单字母 \mathbb{X} -> \X
-     * - 竖线 | -> \mid
      * - 压缩多余空白
-     * - 处理 mhchem 的 \ce{...}
-     * - \xlongequal{...} -> =
+     * - Unicode 符号替换
      *
      * @param {string} latex 原始 LaTeX 代码
      * @returns {string} 归一化后的 LaTeX
@@ -1257,10 +1256,20 @@
         if(!latex) return latex;
         var s = String(latex);
 
-        // 花括号处理（将自适应定界符还原为普通花括号）
-        s = s.replace(/\\left\\\{/g, '\\{').replace(/\\right\\\}/g, '\\}');
-        // 花括号处理（避免在某些环境下使用 \left/\right 导致空白渲染）
-        s = s.replace(/\\\{/g, '\\left\\{').replace(/\\\}/g, '\\right\\}');
+        // 🔧 花括号处理：统一使用 \left\{ 和 \right\}（适配 KaTeX）
+        // 1. 先将裸花括号 \{ 转为 \left\{（确保渲染为大花括号）
+        s = s.replace(/\\{(?!left)/g, '\\left\\{');
+        s = s.replace(/\\}(?!right)/g, '\\right\\}');
+        
+        // 2. 处理已有 \left\{ 但缺少 \right 的情况（补全配对）
+        var leftCount = (s.match(/\\left\\\{/g) || []).length;
+        var rightCount = (s.match(/\\right\\\}/g) || []).length;
+        if(leftCount > rightCount){
+            // 补充缺失的 \right\}
+            for(var i = 0; i < leftCount - rightCount; i++){
+                s += '\\right.'; // 使用隐形右定界符
+            }
+        }
 
         // 单字母 \mathbb{X} -> \X（兼容 AI 输出）
         s = s.replace(/\\mathbb\{\s*([A-Za-z])\s*\}/g, function(_, ch){
