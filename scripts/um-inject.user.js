@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      9.0.4
+// @version      9.0.6
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -19,7 +19,7 @@
     // ========================================
 
     /** 脚本版本号（从元数据中提取） */
-    var SCRIPT_VERSION = '9.0.4';
+    var SCRIPT_VERSION = '9.0.6';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -36,25 +36,21 @@
     /**
      * 公式图片尺寸控制配置
      * 
-     * ✨ 核心原理：通过 baseFontSize 在 KaTeX 渲染时就控制公式大小
-     *    而不是渲染后缩放（避免模糊）
+     * ✨ v9.0.6 新策略：高分辨率渲染 + CSS 缩小显示
+     *    - 渲染：正常大小（1em）+ 2x 分辨率 → 清晰的大图
+     *    - 显示：通过 width 属性缩小到 72% → 匹配官方尺寸
+     *    - 优势：图片清晰 + 尺寸匹配
      * 
-     * 使用方法：
-     * 1. 用相同公式（如 $\frac{a}{b}$）在官方编辑器和脚本中插入
-     * 2. 在浏览器开发者工具中对比生成的 <img> 标签的 width 值
-     * 3. 如果脚本图片偏大 → 减小 baseFontSize（如 '0.75em'）
-     * 4. 如果脚本图片偏小 → 增大 baseFontSize（如 '0.85em'）
-     * 
-     * 常用值参考：
-     * - '1em'   → 100%（默认大小）
-     * - '0.9em' → 90%
-     * - '0.8em' → 80%（推荐：接近橙果官方）
-     * - '0.75em' → 75%
-     * - '0.7em' → 70%（最小建议值）
+     * 参数说明：
+     * - renderScale: html2canvas 的渲染倍率（2 = 2x 分辨率，Retina 屏幕标准）
+     * - displayScale: 最终显示时的缩放比例（0.72 = 缩小到 72%）
+     * - baseFontSize: KaTeX 渲染时的字体大小（1em = 正常大小）
      */
     var IMAGE_SIZE_CONFIG = {
-        baseFontSize: '0.72em',  // ✨ 控制 KaTeX 渲染时的基础字体大小
-        debugSize: false        // 是否在控制台输出尺寸调试信息
+        baseFontSize: '1em',     // ✨ KaTeX 渲染时使用正常字体大小
+        renderScale: 2,          // ✨ html2canvas 渲染倍率（2x 清晰度）
+        displayScale: 0.72,      // ✨ 最终显示时缩小到 72%（匹配官方）
+        debugSize: false         // 是否在控制台输出尺寸调试信息
     };
 
     /**
@@ -471,10 +467,9 @@
                     });
                 }
 
-                // 使用橙果官方 html2canvas 配置
+                // 使用橙果官方 html2canvas 配置 + 高分辨率渲染
                 canvas = await html2canvas(container, {
-                    fontSize: 8,            // 控制字体渲染比例（橙果官方配置）
-                    fontWeight: 100,        // 橙果官方配置
+                    scale: IMAGE_SIZE_CONFIG.renderScale || 2,  // ✨ 2x 分辨率渲染（清晰）
                     backgroundColor: 'transparent',
                     logging: false,
                     allowTaint: true,
@@ -506,19 +501,29 @@
                 if(DEBUG_MODE){
                     console.log('✅ 公式渲染并上传成功:', latex.substring(0, 30), '→', imageUrl);
                 }
+                
+                // ✨ 应用显示缩放比例（高分辨率图片，缩小显示）
+                var displayWidth = Math.round(originalWidth * (IMAGE_SIZE_CONFIG.displayScale || 0.72));
+                var displayHeight = Math.round(originalHeight * (IMAGE_SIZE_CONFIG.displayScale || 0.72));
+                
                 // 返回带尺寸信息的对象
                 return {
                     url: imageUrl,
-                    width: originalWidth,
-                    height: originalHeight
+                    width: displayWidth,   // ✨ 缩小后的显示宽度
+                    height: displayHeight  // ✨ 缩小后的显示高度
                 };
             }else{
                 console.warn('⚠️ 图片上传失败，将使用 base64（可能导致保存问题）');
+                
+                // ✨ base64 回退也应用缩放
+                var displayWidth = Math.round(originalWidth * (IMAGE_SIZE_CONFIG.displayScale || 0.72));
+                var displayHeight = Math.round(originalHeight * (IMAGE_SIZE_CONFIG.displayScale || 0.72));
+                
                 // base64 回退也返回对象格式
                 return {
                     url: dataUrl,
-                    width: originalWidth,
-                    height: originalHeight
+                    width: displayWidth,
+                    height: displayHeight
                 };
             }
 
