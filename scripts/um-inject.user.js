@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      9.0.2
+// @version      9.0.3
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -19,7 +19,7 @@
     // ========================================
 
     /** 脚本版本号（从元数据中提取） */
-    var SCRIPT_VERSION = '9.0.2';
+    var SCRIPT_VERSION = '9.0.3';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -122,6 +122,87 @@
         }
 
         return {latex: latex.trim(), isDisplay: isDisplay};
+    }
+
+    /**
+     * 判断 LaTeX 公式是否简单（适合 MathQuill 渲染）
+     * 
+     * 简单公式定义：
+     * - 单个变量/数字：x, y, a, 1, 2
+     * - 简单上下标：x^2, a_1, x^{2}
+     * - 简单分数：\frac{a}{b}（分子分母都简单）
+     * - 简单根式：\sqrt{x}, \sqrt[3]{x}
+     * - 基本运算符和简单组合
+     * 
+     * 复杂公式（直接渲染为图片）：
+     * - 矩阵：\begin{matrix}, \begin{pmatrix}, \begin{bmatrix}
+     * - 分段函数：\begin{cases}
+     * - 多行公式：\begin{align}, \begin{array}
+     * - 积分/求和：\int, \sum, \prod（带复杂上下标）
+     * - 复杂嵌套：多层分数、复杂根式
+     * - 长公式：超过一定长度
+     * 
+     * @param {string} latex 纯 LaTeX 代码（不含定界符）
+     * @returns {boolean} true=简单（用 MathQuill），false=复杂（用图片）
+     */
+    function isSimpleFormula(latex){
+        if(!latex) return true;
+        var s = String(latex).trim();
+
+        // 空公式或极短公式 → 简单
+        if(s.length === 0 || s.length <= 3) return true;
+
+        // 复杂环境命令 → 复杂（直接渲染为图片）
+        var complexEnvironments = [
+            '\\begin{matrix}', '\\begin{pmatrix}', '\\begin{bmatrix}',
+            '\\begin{vmatrix}', '\\begin{Vmatrix}',
+            '\\begin{cases}', '\\begin{array}', '\\begin{align}',
+            '\\begin{equation}', '\\begin{split}'
+        ];
+        for(var i=0; i<complexEnvironments.length; i++){
+            if(s.indexOf(complexEnvironments[i]) !== -1){
+                if(DEBUG_MODE) console.log('🔍 复杂公式（环境）:', s.substring(0, 30));
+                return false;
+            }
+        }
+
+        // 积分/求和/极限等复杂符号（带上下标）→ 复杂
+        var complexSymbols = [
+            '\\int_', '\\int^', '\\iint', '\\iiint',
+            '\\sum_', '\\sum^', '\\prod_', '\\prod^',
+            '\\lim_', '\\lim^',
+            '\\bigcup', '\\bigcap'
+        ];
+        for(var i=0; i<complexSymbols.length; i++){
+            if(s.indexOf(complexSymbols[i]) !== -1){
+                if(DEBUG_MODE) console.log('🔍 复杂公式（符号）:', s.substring(0, 30));
+                return false;
+            }
+        }
+
+        // 复杂嵌套检测：多层 \frac
+        var fracCount = (s.match(/\\frac/g) || []).length;
+        if(fracCount >= 3){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（多层分数）:', s.substring(0, 30));
+            return false;
+        }
+
+        // 长度检测：超过 50 个字符 → 复杂
+        if(s.length > 50){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（长度）:', s.substring(0, 30), '长度:', s.length);
+            return false;
+        }
+
+        // 复杂括号嵌套：\left 和 \right 配对超过 2 层
+        var leftCount = (s.match(/\\left/g) || []).length;
+        if(leftCount >= 3){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（多层括号）:', s.substring(0, 30));
+            return false;
+        }
+
+        // 其他情况 → 简单
+        if(DEBUG_MODE) console.log('✅ 简单公式:', s.substring(0, 30));
+        return true;
     }
 
     /**
@@ -1130,68 +1211,6 @@
     }
 
     /**
-     * 验证 MathQuill 渲染是否成功（适配老版本 jQuery 插件）
-     *
-     * 老版本 MathQuill 不创建 .mq-root-block，直接在容器中渲染
-     * 检查策略：
-     * - 检查是否有 .selectable（定界符 $$）
-     * - 检查是否有 mathquill-command-id 属性
-     * - 检查是否有 MathQuill 特定的类名和元素
-     *
-     * @param {HTMLElement} container 渲染容器（MathQuill 实例的根元素）
-     * @param {string} originalLatex 原始 LaTeX 代码（用于错误报告）
-     * @returns {{success: boolean, error?: string, isEmpty?: boolean}}
-     */
-    function validateMathQuillRender(container, originalLatex) {
-        try {
-            // 老版本 MathQuill 不创建 .mq-root-block，直接在容器中渲染
-            // 检查是否有 MathQuill 渲染的标记
-            var hasSelectable = container.querySelector('.selectable');
-            var hasCommandId = container.querySelector('[mathquill-command-id]');
-            var hasMQClasses = container.querySelector('.non-leaf, .binary-operator, .fraction, .numerator, .denominator, sup, sub');
-
-            if (!hasSelectable && !hasCommandId && !hasMQClasses) {
-                return {
-                    success: false,
-                    error: '未找到 MathQuill 渲染结构（可能解析失败）',
-                    isEmpty: true
-                };
-            }
-
-            // 检查是否有实际的数学内容（不只是定界符）
-            var mathNodes = container.querySelectorAll('var, sup, sub, .fraction, .non-leaf, .binary-operator, [mathquill-command-id]');
-
-            // 如果没有任何数学节点，说明渲染失败
-            if (mathNodes.length === 0) {
-                return {
-                    success: false,
-                    error: '渲染结果为空（LaTeX 可能不被支持）',
-                    isEmpty: true
-                };
-            }
-
-            // 检查渲染后的尺寸（额外验证）
-            var rect = container.getBoundingClientRect();
-            if (rect.width < 3 && rect.height < 3) {
-                return {
-                    success: false,
-                    error: '渲染尺寸异常（宽高过小）',
-                    isEmpty: true
-                };
-            }
-
-            return { success: true };
-
-        } catch (e) {
-            return {
-                success: false,
-                error: '验证过程出错: ' + (e.message || e),
-                isEmpty: false
-            };
-        }
-    }
-
-    /**
      * 对 LaTeX 代码进行归一化处理（适配 MathQuill 渲染）
      *
      * 处理项：
@@ -1315,66 +1334,59 @@
                 var stripped = stripLatexDelimiters(token);
                 var normalizedWhole = normalizeLatexForMathQuill(stripped.latex);
 
-                // 尝试 MathQuill 渲染
-                try{
-                    var inst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
-                    if(inst && inst.win){
-                        try{
-                            var cw = inst.win;
-                            // UMEditor 使用 jQuery 插件版本的 MathQuill
-                            var $ = cw.jQuery || cw.$;
+                // 判断公式复杂度
+                var isSimple = isSimpleFormula(stripped.latex);
 
-                            if($ && typeof $.fn.mathquill === 'function'){
-                                var temp = cw.document.createElement('span');
-                                temp.className = 'mq-temp-for-insert';
-                                temp.style.position = 'absolute';
-                                temp.style.left = '-9999px';
-                                temp.style.visibility = 'hidden';
-                                cw.document.body.appendChild(temp);
+                if (!isSimple) {
+                    // 复杂公式：直接渲染为图片
+                    console.log('🔍 单公式（复杂）→ 渲染为图片');
+                    // 不使用 MathQuill，跳到混合内容路径处理
+                } else {
+                    // 简单公式：尝试 MathQuill 渲染
+                    console.log('🔍 单公式（简单）→ 尝试 MathQuill');
+                    try{
+                        var inst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
+                        if(inst && inst.win){
+                            try{
+                                var cw = inst.win;
+                                // UMEditor 使用 jQuery 插件版本的 MathQuill
+                                var $ = cw.jQuery || cw.$;
 
-                                // 使用 jQuery 插件接口渲染
-                                var $temp = $(temp);
-                                $temp.mathquill();
-                                $temp.mathquill('latex', normalizedWhole);
+                                if($ && typeof $.fn.mathquill === 'function'){
+                                    var temp = cw.document.createElement('span');
+                                    temp.className = 'mq-temp-for-insert';
+                                    temp.style.position = 'absolute';
+                                    temp.style.left = '-9999px';
+                                    temp.style.visibility = 'hidden';
+                                    cw.document.body.appendChild(temp);
 
-                                // 验证渲染是否成功
-                                var validation = validateMathQuillRender(temp, normalizedWhole);
+                                    // 使用 jQuery 插件接口渲染
+                                    var $temp = $(temp);
+                                    $temp.mathquill();
+                                    $temp.mathquill('latex', normalizedWhole);
 
-                                if (!validation.success) {
-                                    // 渲染失败，清理并直接输出公式文本（带定界符）
+                                    var outer = temp.outerHTML;
                                     temp.parentNode && temp.parentNode.removeChild(temp);
 
-                                    console.warn('🔍 单公式渲染失败:', validation.error, '将输出公式文本');
-
-                                    // 直接输出公式文本（带定界符）
                                     var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
-                                    if (targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function') {
-                                        targetInst.ed.execCommand('inserthtml', escapeHtml(token));
+                                    if(targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function'){
+                                        targetInst.ed.execCommand('inserthtml', outer);
+                                        return;
                                     }
-                                    return;
                                 }
-
-                                var outer = temp.outerHTML;
-                                temp.parentNode && temp.parentNode.removeChild(temp);
-
-                                var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
-                                if(targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function'){
-                                    targetInst.ed.execCommand('inserthtml', outer);
-                                    return;
-                                }
+                            }catch(innerErr){
+                                console.warn('MathQuill jQuery plugin render failed or unavailable in target window', innerErr);
                             }
-                        }catch(innerErr){
-                            console.warn('MathQuill jQuery plugin render failed or unavailable in target window', innerErr);
                         }
-                    }
 
-                    // 回退到 execCommand('formula')
-                    if(typeof editor.execCommand === 'function'){
-                        editor.execCommand('formula', normalizedWhole);
-                        return;
+                        // 回退到 execCommand('formula')
+                        if(typeof editor.execCommand === 'function'){
+                            editor.execCommand('formula', normalizedWhole);
+                            return;
+                        }
+                    }catch(err){
+                        console.warn('execCommand formula failed, falling back to HTML insert', err);
                     }
-                }catch(err){
-                    console.warn('execCommand formula failed, falling back to HTML insert', err);
                 }
             }
         }catch(e){
@@ -1393,148 +1405,37 @@
             return '@@UM_LATEX_' + id + '@@';
         });
 
-        // 2a-2. 预验证所有公式（批量检测）
-        var failedTokens = [];
+        // 2a-2. 判断公式复杂度（简单→MathQuill，复杂→图片）
+        var complexTokens = [];  // 需要渲染为图片的复杂公式
         if (tokens.length > 0) {
-            console.log('🔍 开始批量验证', tokens.length, '个公式...');
+            console.log('🔍 开始判断', tokens.length, '个公式的复杂度...');
 
-            // 查找包含 MathQuill 的窗口（可能在 iframe 中）
-            var mqWindow = null;
-            var mqJQuery = null;
+            for (var i = 0; i < tokens.length; i++) {
+                var tkn = tokens[i].raw;
+                var stripped = stripLatexDelimiters(tkn);
+                var isSimple = isSimpleFormula(stripped.latex);
 
-            // 1. 检查主窗口
-            try {
-                console.log('🔍 检查主窗口:');
-                console.log('  → jQuery 存在:', !!window.jQuery);
-
-                if (window.jQuery) {
-                    console.log('  → jQuery 版本:', window.jQuery.fn.jquery);
-                    console.log('  → $.fn.mathquill 存在:', typeof window.jQuery.fn.mathquill);
-
-                    if (typeof window.jQuery.fn.mathquill === 'function') {
-                        mqWindow = window;
-                        mqJQuery = window.jQuery;
-                        console.log('🔍 ✅ MathQuill 找到：主窗口');
-                    }
-                }
-            } catch (e) {
-                console.log('  → 检查主窗口时出错:', e.message);
-            }
-
-            // 2. 检查所有 iframe
-            if (!mqWindow) {
-                var iframes = document.getElementsByTagName('iframe');
-                console.log('🔍 检查 iframe 数量:', iframes.length);
-
-                for (var idx = 0; idx < iframes.length; idx++) {
-                    try {
-                        var fr = iframes[idx];
-                        console.log('🔍 检查 iframe', idx, ':', fr.src || fr.id || '(无标识)');
-
-                        var cw = fr.contentWindow;
-                        if (!cw) {
-                            console.log('  → contentWindow 不可访问');
-                            continue;
-                        }
-
-                        console.log('  → contentWindow 可访问');
-                        console.log('  → jQuery 存在:', !!cw.jQuery);
-
-                        if (cw.jQuery) {
-                            console.log('  → jQuery 版本:', cw.jQuery.fn.jquery);
-                            console.log('  → $.fn.mathquill 存在:', typeof cw.jQuery.fn.mathquill);
-
-                            if (typeof cw.jQuery.fn.mathquill === 'function') {
-                                mqWindow = cw;
-                                mqJQuery = cw.jQuery;
-                                console.log('🔍 ✅ MathQuill 找到：iframe', idx, fr.src || fr.id || '(无标识)');
-                                break;
-                            }
-                        }
-                    } catch (e) {
-                        console.log('  → 跨域限制:', e.message);
-                    }
+                if (!isSimple) {
+                    // 复杂公式：标记为需要渲染为图片
+                    complexTokens.push({
+                        index: i + 1,
+                        id: tokens[i].id,
+                        raw: tkn,
+                        latex: stripped.latex,
+                        isDisplay: stripped.isDisplay
+                    });
                 }
             }
 
-            if (!mqWindow || !mqJQuery) {
-                console.warn('🔍 MathQuill jQuery 插件未加载（懒加载机制）');
-                console.info('� 提示：如需预验证公式，请先点击编辑器的"公式"按钮以加载 MathQuill');
-                console.info('� 将直接插入内容，公式渲染结果可在编辑器中查看');
-            } else {
-                try {
-                    var cw = mqWindow;
-                    var $ = mqJQuery;
-                    console.log('🔍 使用 MathQuill，jQuery 版本:', $.fn.jquery);
-
-                    if ($ && typeof $.fn.mathquill === 'function') {
-                        // 创建临时容器
-                        var tempContainer = cw.document.createElement('div');
-                        tempContainer.style.position = 'absolute';
-                        tempContainer.style.left = '-9999px';
-                        tempContainer.style.visibility = 'hidden';
-                        cw.document.body.appendChild(tempContainer);
-
-                        // 批量验证每个 token
-                        for (var i = 0; i < tokens.length; i++) {
-                            var tkn = tokens[i].raw;
-                            var stripped = stripLatexDelimiters(tkn);
-                            var normalized = normalizeLatexForMathQuill(stripped.latex);
-
-                            // 创建测试 span
-                            var testSpan = cw.document.createElement('span');
-                            testSpan.className = 'mq-validation-test';
-                            tempContainer.appendChild(testSpan);
-
-                            try {
-                                // 使用 jQuery 插件接口
-                                var $testSpan = $(testSpan);
-                                $testSpan.mathquill();
-                                $testSpan.mathquill('latex', normalized);
-
-                                var validation = validateMathQuillRender(testSpan, normalized);
-                                if(DEBUG_MODE){
-                                    console.log('🔍 公式', i + 1, '验证结果:', validation.success ? '✅ 成功' : '❌ 失败', normalized.substring(0, 30));
-                                }
-
-                                if (!validation.success) {
-                                    failedTokens.push({
-                                        index: i + 1,
-                                        id: tokens[i].id,
-                                        raw: tkn,
-                                        latex: stripped.latex,
-                                        normalized: normalized,
-                                        error: validation.error
-                                    });
-                                }
-                            } catch (e) {
-                                console.error('🔍 公式', i + 1, '渲染异常:', e);
-                                failedTokens.push({
-                                    index: i + 1,
-                                    id: tokens[i].id,
-                                    raw: tkn,
-                                    latex: token,
-                                    normalized: normalized,
-                                    error: '渲染异常: ' + (e.message || e)
-                                });
-                            }
-
-                            tempContainer.removeChild(testSpan);
-                        }
-
-                        // 清理临时容器
-                        cw.document.body.removeChild(tempContainer);
-                        console.log('🔍 批量验证完成，失败数量:', failedTokens.length);
-                    }
-                } catch (e) {
-                    console.warn('批量验证公式时出错，将继续插入', e);
-                }
-            }
+            console.log('🔍 复杂度判断完成，复杂公式数量:', complexTokens.length);
         }
 
-        // 2a-3. 记录失败的公式（仅用于日志，不弹窗）
-        if (failedTokens.length > 0) {
-            console.warn('🔍 检测到', failedTokens.length, '个公式无法正确渲染，将以文本形式输出');
+        // 2a-3. 输出判断结果
+        if (complexTokens.length > 0) {
+            console.info('�', complexTokens.length, '个复杂公式将渲染为图片（快速、稳定）');
+        }
+        if (tokens.length - complexTokens.length > 0) {
+            console.info('�', (tokens.length - complexTokens.length), '个简单公式将使用 MathQuill（可编辑）');
         }
 
         // 2b. 根据复选框决定是否启用 Markdown
@@ -1605,7 +1506,7 @@
             // 忽略
         }
 
-        // 2d. 将占位符替换为公式 HTML（失败的公式尝试渲染为图片）
+        // 2d. 将占位符替换为公式 HTML（复杂公式渲染为图片，简单公式使用 MathQuill）
         // 使用 for 循环 + await 确保顺序处理（避免并发导致的问题）
         for(var i=0; i<tokens.length; i++){
             // 使用 IIFE 创建独立作用域，避免闭包捕获问题
@@ -1613,18 +1514,18 @@
                 var tkn = tokens[index].raw;
                 var tokenId = tokens[index].id;
 
-                // 检查该公式是否验证失败
-                var isFailed = false;
-                for(var j=0; j<failedTokens.length; j++){
-                    if(failedTokens[j].id === tokenId){
-                        isFailed = true;
+                // 检查该公式是否为复杂公式
+                var isComplex = false;
+                for(var j=0; j<complexTokens.length; j++){
+                    if(complexTokens[j].id === tokenId){
+                        isComplex = true;
                         break;
                     }
                 }
 
                 var repl;
-                if(isFailed){
-                    // 验证失败：尝试用 KaTeX 渲染为图片并上传
+                if(isComplex){
+                    // 复杂公式：用 KaTeX 渲染为图片并上传
                     var stripped = stripLatexDelimiters(tkn);
                     var imgResult = await renderFormulaToImage(stripped.latex, stripped.isDisplay);
 
@@ -1641,7 +1542,7 @@
                         console.warn('⚠️ 公式', index+1, '渲染为图片失败，输出纯文本');
                     }
                 }else{
-                    // 验证成功或未验证：正常输出 MathQuill HTML
+                    // 简单公式：正常输出 MathQuill HTML（可编辑）
                     var stripped = stripLatexDelimiters(tkn);
                     var normalized = normalizeLatexForMathQuill(stripped.latex);
                     var span = '<span class="mathquill-embedded-latex">' + escapeHtml(normalized) + '</span>';
