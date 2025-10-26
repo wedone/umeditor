@@ -127,20 +127,22 @@
     /**
      * 判断 LaTeX 公式是否简单（适合 MathQuill 渲染）
      * 
-     * 简单公式定义：
+     * 简单公式定义（严格）：
      * - 单个变量/数字：x, y, a, 1, 2
-     * - 简单上下标：x^2, a_1, x^{2}
-     * - 简单分数：\frac{a}{b}（分子分母都简单）
-     * - 简单根式：\sqrt{x}, \sqrt[3]{x}
-     * - 基本运算符和简单组合
+     * - 简单上下标：x^2, a_1, x^{2}（仅支持单层）
+     * - 基本运算符：+, -, =, <, >
+     * - 简单括号：单层圆括号
      * 
      * 复杂公式（直接渲染为图片）：
-     * - 矩阵：\begin{matrix}, \begin{pmatrix}, \begin{bmatrix}
-     * - 分段函数：\begin{cases}
-     * - 多行公式：\begin{align}, \begin{array}
-     * - 积分/求和：\int, \sum, \prod（带复杂上下标）
-     * - 复杂嵌套：多层分数、复杂根式
-     * - 长公式：超过一定长度
+     * - 任何 \begin 环境（matrix, cases, array, align 等）
+     * - 分数：\frac（任何分数都走图片）
+     * - 根式：\sqrt（任何根式都走图片）
+     * - 积分/求和：\int, \sum, \prod
+     * - 极限：\lim
+     * - 复杂括号：\left, \right
+     * - 希腊字母组合：多个希腊字母
+     * - 长公式：超过 30 个字符
+     * - 多个上下标：超过 2 个
      * 
      * @param {string} latex 纯 LaTeX 代码（不含定界符）
      * @returns {boolean} true=简单（用 MathQuill），false=复杂（用图片）
@@ -149,29 +151,40 @@
         if(!latex) return true;
         var s = String(latex).trim();
 
-        // 空公式或极短公式 → 简单
-        if(s.length === 0 || s.length <= 3) return true;
+        // 空公式 → 简单
+        if(s.length === 0) return true;
 
-        // 复杂环境命令 → 复杂（直接渲染为图片）
-        var complexEnvironments = [
-            '\\begin{matrix}', '\\begin{pmatrix}', '\\begin{bmatrix}',
-            '\\begin{vmatrix}', '\\begin{Vmatrix}',
-            '\\begin{cases}', '\\begin{array}', '\\begin{align}',
-            '\\begin{equation}', '\\begin{split}'
-        ];
-        for(var i=0; i<complexEnvironments.length; i++){
-            if(s.indexOf(complexEnvironments[i]) !== -1){
-                if(DEBUG_MODE) console.log('🔍 复杂公式（环境）:', s.substring(0, 30));
-                return false;
-            }
+        // 长度检测：超过 30 个字符 → 复杂（收紧从 50 → 30）
+        if(s.length > 30){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（长度）:', s.substring(0, 30), '长度:', s.length);
+            return false;
         }
 
-        // 积分/求和/极限等复杂符号（带上下标）→ 复杂
+        // 任何 \begin 环境 → 复杂
+        if(s.indexOf('\\begin{') !== -1){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（环境）:', s.substring(0, 30));
+            return false;
+        }
+
+        // 分数 \frac → 复杂（任何分数都走图片）
+        if(s.indexOf('\\frac') !== -1){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（分数）:', s.substring(0, 30));
+            return false;
+        }
+
+        // 根式 \sqrt → 复杂（任何根式都走图片）
+        if(s.indexOf('\\sqrt') !== -1){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（根式）:', s.substring(0, 30));
+            return false;
+        }
+
+        // 积分/求和/极限等符号 → 复杂
         var complexSymbols = [
-            '\\int_', '\\int^', '\\iint', '\\iiint',
-            '\\sum_', '\\sum^', '\\prod_', '\\prod^',
-            '\\lim_', '\\lim^',
-            '\\bigcup', '\\bigcap'
+            '\\int', '\\iint', '\\iiint',
+            '\\sum', '\\prod',
+            '\\lim',
+            '\\bigcup', '\\bigcap',
+            '\\oint'
         ];
         for(var i=0; i<complexSymbols.length; i++){
             if(s.indexOf(complexSymbols[i]) !== -1){
@@ -180,27 +193,43 @@
             }
         }
 
-        // 复杂嵌套检测：多层 \frac
-        var fracCount = (s.match(/\\frac/g) || []).length;
-        if(fracCount >= 3){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（多层分数）:', s.substring(0, 30));
+        // 复杂括号：\left 和 \right → 复杂
+        if(s.indexOf('\\left') !== -1 || s.indexOf('\\right') !== -1){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（复杂括号）:', s.substring(0, 30));
             return false;
         }
 
-        // 长度检测：超过 50 个字符 → 复杂
-        if(s.length > 50){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（长度）:', s.substring(0, 30), '长度:', s.length);
+        // 上下标数量检测：超过 2 个 ^ 或 _ → 复杂
+        var superscriptCount = (s.match(/\^/g) || []).length;
+        var subscriptCount = (s.match(/_/g) || []).length;
+        if(superscriptCount + subscriptCount > 2){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（多个上下标）:', s.substring(0, 30));
             return false;
         }
 
-        // 复杂括号嵌套：\left 和 \right 配对超过 2 层
-        var leftCount = (s.match(/\\left/g) || []).length;
-        if(leftCount >= 3){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（多层括号）:', s.substring(0, 30));
+        // 希腊字母数量检测：超过 1 个希腊字母 → 复杂
+        var greekLetters = [
+            '\\alpha', '\\beta', '\\gamma', '\\delta', '\\epsilon',
+            '\\theta', '\\lambda', '\\mu', '\\pi', '\\sigma',
+            '\\phi', '\\omega', '\\Omega', '\\Gamma', '\\Delta'
+        ];
+        var greekCount = 0;
+        for(var i=0; i<greekLetters.length; i++){
+            if(s.indexOf(greekLetters[i]) !== -1){
+                greekCount++;
+            }
+        }
+        if(greekCount > 1){
+            if(DEBUG_MODE) console.log('🔍 复杂公式（多个希腊字母）:', s.substring(0, 30));
             return false;
         }
 
         // 其他情况 → 简单
+        // 允许的简单公式示例：
+        // - 单变量：x, y, a
+        // - 简单上下标：x^2, a_1, x_{max}
+        // - 简单运算：x + y, a = b, 2 + 3
+        // - 单个希腊字母：\pi, \theta
         if(DEBUG_MODE) console.log('✅ 简单公式:', s.substring(0, 30));
         return true;
     }
