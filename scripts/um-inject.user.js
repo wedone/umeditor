@@ -361,15 +361,19 @@
                 return null;
             }
 
-            // 2. 创建临时容器
+            // 2. 创建临时容器（完全对齐橙果官方样式）
             var container = document.createElement('div');
             container.style.position = 'absolute';
             container.style.left = '-9999px';
             container.style.top = '-9999px';
-            container.style.padding = '1px';
+            // 🔧 橙果官方关键样式：padding 影响 offsetWidth 计算
+            container.style.paddingTop = '2px';
+            container.style.paddingBottom = '3px';
+            container.style.width = 'auto';
+            container.style.height = 'auto';
             container.style.background = 'transparent';
             container.style.fontSize = isDisplay ? '17px' : '16px';
-            container.style.lineHeight = '1.2'; // 🔧 关键：设置行高，避免分段函数行距过大
+            container.style.lineHeight = '1.0'; // 🔧 紧凑行高，避免分段函数行距过大
             container.style.display = 'inline-block';
             document.body.appendChild(container);
 
