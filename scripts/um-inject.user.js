@@ -53,7 +53,7 @@
      * - '0.7em' → 70%（最小建议值）
      */
     var IMAGE_SIZE_CONFIG = {
-        baseFontSize: '0.75em',  // ✨ 控制 KaTeX 渲染时的基础字体大小
+        baseFontSize: '0.72em',  // ✨ 控制 KaTeX 渲染时的基础字体大小
         debugSize: false        // 是否在控制台输出尺寸调试信息
     };
 
@@ -314,12 +314,6 @@
             // ✨ 关键：设置基础字体大小（使用配置项）
             // 在 KaTeX 渲染时就控制尺寸，而非事后缩放（保持清晰度）
             container.style.fontSize = IMAGE_SIZE_CONFIG.baseFontSize || '0.8em';
-            
-            // 增加 padding 防止大型公式（如 cases 环境）被裁剪
-            container.style.paddingTop = '8px';
-            container.style.paddingBottom = '8px';
-            container.style.paddingLeft = '2px';
-            container.style.paddingRight = '2px';
             
             container.style.background = 'transparent';
             document.body.appendChild(container);
