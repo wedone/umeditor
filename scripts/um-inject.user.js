@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      2025.10.21.00020
+// @version      2025.10.21.00021
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -17,6 +17,11 @@
     // ========================================
     // 配置模块
     // ========================================
+
+    /** 脚本版本号（从 GM_info 读取，如不可用则使用默认值） */
+    var SCRIPT_VERSION = (typeof GM_info !== 'undefined' && GM_info.script && GM_info.script.version) 
+        ? GM_info.script.version 
+        : '2025.10.21.00021';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -691,7 +696,10 @@
                     <div id="um-inject-badge" style="width:28px;height:28px;border-radius:6px;background:rgba(255,255,255,0.14);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">🍊</div>
                     <strong style="font-size:14px;letter-spacing:0.2px">橙果错题助手</strong>
                 </div>
-                <button id="um-inject-close" aria-label="关闭面板" style="background:transparent;border:none;color:rgba(255,255,255,0.9);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:6px">✕</button>
+                <div style="display:flex;align-items:center;gap:12px">
+                    <span style="font-size:11px;opacity:0.75;font-weight:500">v${SCRIPT_VERSION}</span>
+                    <button id="um-inject-close" aria-label="关闭面板" style="background:transparent;border:none;color:rgba(255,255,255,0.9);font-size:12px;cursor:pointer;padding:6px 8px;border-radius:6px">✕</button>
+                </div>
             </div>
             <div style="padding:12px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(180deg,rgba(255,255,255,0.98),rgba(250,250,252,0.98));">
                 <div>
