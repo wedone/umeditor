@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      9.0.7
+// @version      9.0.8
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -19,7 +19,7 @@
     // ========================================
 
     /** 脚本版本号（从元数据中提取） */
-    var SCRIPT_VERSION = '9.0.7';
+    var SCRIPT_VERSION = '9.0.8';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -56,51 +56,24 @@
     /**
      * KaTeX 渲染样式自定义配置
      * 
-     * 可自定义的样式：
-     * - 分数样式（分子分母字体大小、线条粗细）
-     * - 根号样式（符号大小、线条粗细）
-     * - 上下标样式（字体大小、位置）
-     * - 积分符号、求和符号等
+     * ✨ v9.0.8 优化：采用 HTML v6.6.8 的分数样式（更好的可读性，避免重叠）
      * 
-     * CSS 选择器参考：
-     * - .frac-line: 分数线
-     * - .mfrac > .vlist-t .vlist-r > .vlist > span: 分子分母容器
-     * - .mord: 普通字符
-     * - .mbin: 二元运算符
-     * - .mrel: 关系符号
-     * - .sqrt: 根号
+     * 关键改进：
+     * - 使用精确选择器 `.mfrac > span > span` 而不是 `.mfrac > .vlist-t .sizing`
+     * - 分子分母字体从默认 0.7em 增大到 0.9em（避免挤在一起）
+     * - 分数线粗细设为 0.08em（更清晰）
      */
     var KATEX_CUSTOM_STYLES = {
-        enabled: false,  // ✨ 是否启用自定义样式（默认关闭，使用 KaTeX 默认样式）
+        enabled: true,  // ✨ 默认启用（使用 HTML 文件的优化样式）
         
-        // 自定义 CSS 规则（当 enabled = true 时应用）
+        // ✨ 采用 HTML v6.6.8 的分数优化 CSS
         css: `
-            /* 分数样式 */
-            // .katex .mfrac .frac-line {
-            //     border-bottom-width: 0.05em !important;  /* 分数线粗细（默认 0.04em） */
-            // }
-            
-            .katex .mfrac > .vlist-t .sizing {
-                font-size: 0.9em !important;  /* 分子分母字体大小（默认 0.7em） */
+            /* v6.6.8 修正：调整 KaTeX 分数样式 - 使用更精确的选择器 */
+            .katex .mfrac > span > span {
+                font-size: 0.9em !important;  /* 调大分子分母字体 */
             }
-            
-            // /* 根号样式 */
-            // .katex .sqrt > .root {
-            //     font-size: 0.8em !important;  /* 根号次数大小（默认 0.6em） */
-            // }
-            
-            // .katex .sqrt .sqrt-line {
-            //     border-top-width: 0.06em !important;  /* 根号线粗细（默认 0.04em） */
-            // }
-            
-            // /* 上下标样式 */
-            // .katex .msupsub {
-            //     font-size: 0.75em !important;  /* 上下标字体大小（默认 0.7em） */
-            // }
-            
-            // /* 积分符号 */
-            // .katex .mop.op-symbol.large-op {
-            //     font-size: 1.1em !important;  /* 大型运算符大小（如 ∫ Σ Π） */
+            .katex .mfrac .frac-line {
+                border-top-width: 0.08em !important;  /* 调整分数线粗细 */
             }
         `
     };
@@ -476,11 +449,13 @@
             container.style.background = 'transparent';
             document.body.appendChild(container);
 
-            // 3. 使用 KaTeX 渲染
+            // 3. 使用 KaTeX 渲染（简化配置，不需要 macros）
             try{
                 katex.render(latex, container, {
                     displayMode: isDisplay,
-                    throwOnError: false
+                    throwOnError: false,
+                    strict: false,        // ✨ 非严格模式，支持更多 LaTeX 命令
+                    trust: true           // ✨ 信任模式，允许 HTML 和扩展功能
                 });
                 
                 // ✨ 应用自定义样式（如果启用）
