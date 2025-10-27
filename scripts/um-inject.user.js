@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      9.0.6
+// @version      9.0.7
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -19,7 +19,7 @@
     // ========================================
 
     /** 脚本版本号（从元数据中提取） */
-    var SCRIPT_VERSION = '9.0.6';
+    var SCRIPT_VERSION = '9.0.7';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -51,6 +51,58 @@
         renderScale: 2,          // ✨ html2canvas 渲染倍率（2x 清晰度）
         displayScale: 0.72,      // ✨ 最终显示时缩小到 72%（匹配官方）
         debugSize: false         // 是否在控制台输出尺寸调试信息
+    };
+
+    /**
+     * KaTeX 渲染样式自定义配置
+     * 
+     * 可自定义的样式：
+     * - 分数样式（分子分母字体大小、线条粗细）
+     * - 根号样式（符号大小、线条粗细）
+     * - 上下标样式（字体大小、位置）
+     * - 积分符号、求和符号等
+     * 
+     * CSS 选择器参考：
+     * - .frac-line: 分数线
+     * - .mfrac > .vlist-t .vlist-r > .vlist > span: 分子分母容器
+     * - .mord: 普通字符
+     * - .mbin: 二元运算符
+     * - .mrel: 关系符号
+     * - .sqrt: 根号
+     */
+    var KATEX_CUSTOM_STYLES = {
+        enabled: false,  // ✨ 是否启用自定义样式（默认关闭，使用 KaTeX 默认样式）
+        
+        // 自定义 CSS 规则（当 enabled = true 时应用）
+        css: `
+            /* 分数样式 */
+            // .katex .mfrac .frac-line {
+            //     border-bottom-width: 0.05em !important;  /* 分数线粗细（默认 0.04em） */
+            // }
+            
+            .katex .mfrac > .vlist-t .sizing {
+                font-size: 0.9em !important;  /* 分子分母字体大小（默认 0.7em） */
+            }
+            
+            // /* 根号样式 */
+            // .katex .sqrt > .root {
+            //     font-size: 0.8em !important;  /* 根号次数大小（默认 0.6em） */
+            // }
+            
+            // .katex .sqrt .sqrt-line {
+            //     border-top-width: 0.06em !important;  /* 根号线粗细（默认 0.04em） */
+            // }
+            
+            // /* 上下标样式 */
+            // .katex .msupsub {
+            //     font-size: 0.75em !important;  /* 上下标字体大小（默认 0.7em） */
+            // }
+            
+            // /* 积分符号 */
+            // .katex .mop.op-symbol.large-op {
+            //     font-size: 1.1em !important;  /* 大型运算符大小（如 ∫ Σ Π） */
+            }
+        `
     };
 
     /**
@@ -430,6 +482,18 @@
                     displayMode: isDisplay,
                     throwOnError: false
                 });
+                
+                // ✨ 应用自定义样式（如果启用）
+                if(KATEX_CUSTOM_STYLES.enabled && KATEX_CUSTOM_STYLES.css){
+                    var styleId = 'katex-custom-styles-' + Date.now();
+                    var styleEl = document.createElement('style');
+                    styleEl.id = styleId;
+                    styleEl.textContent = KATEX_CUSTOM_STYLES.css;
+                    document.head.appendChild(styleEl);
+                    
+                    // 记录 style 元素，稍后清理
+                    container.setAttribute('data-style-id', styleId);
+                }
             }catch(e){
                 console.warn('KaTeX 渲染失败:', e.message);
                 document.body.removeChild(container);
@@ -485,7 +549,14 @@
                 return null;
             }
 
-            // 7. 清理临时容器
+            // 7. 清理临时容器和样式
+            var styleId = container.getAttribute('data-style-id');
+            if(styleId){
+                var styleEl = document.getElementById(styleId);
+                if(styleEl){
+                    document.head.removeChild(styleEl);
+                }
+            }
             document.body.removeChild(container);
 
             if(!dataUrl){
