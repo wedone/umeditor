@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      9.1.0
+// @version      9.1.1
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -19,7 +19,7 @@
     // ========================================
 
     /** 脚本版本号（从元数据中提取） */
-    var SCRIPT_VERSION = '9.1.0';
+    var SCRIPT_VERSION = '9.1.1';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -164,6 +164,19 @@
         if(!latex) return {isSimple: true, score: 0, details: {symbolScore: 0, depthScore: 0}};
         var s = String(latex).trim();
         if(s.length === 0) return {isSimple: true, score: 0, details: {symbolScore: 0, depthScore: 0}};
+        
+        // 检测是否为化学公式（包含 \ce 命令），直接返回复杂度高的结果
+        if(s.includes('\\ce{')) {
+            return {
+                isSimple: false, 
+                score: 5,  // 直接给出高分，确保用图片渲染
+                details: {
+                    symbolScore: 5,
+                    depthScore: 0,
+                    isChemical: true  // 标记为化学公式
+                }
+            };
+        }
 
         // 1. 计算符号权重分
         var symbolScore = 0;
@@ -371,8 +384,18 @@
                 var s = document.createElement('script');
                 s.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js';
                 s.onload = function(){
-                    console.log('✅ KaTeX 加载成功');
-                    resolve(window.katex || null);
+                    // 加载 mhchem 扩展
+                    var mhchemScript = document.createElement('script');
+                    mhchemScript.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/mhchem.min.js';
+                    mhchemScript.onload = function() {
+                        console.log('✅ KaTeX 和 mhchem 扩展加载成功');
+                        resolve(window.katex || null);
+                    };
+                    mhchemScript.onerror = function() {
+                        console.warn('⚠️ mhchem 扩展加载失败');
+                        resolve(window.katex || null);
+                    };
+                    document.head.appendChild(mhchemScript);
                 };
                 s.onerror = function(){
                     console.warn('⚠️ KaTeX 加载失败');
@@ -499,7 +522,8 @@
                     displayMode: isDisplay,
                     throwOnError: false,
                     strict: false,        // ✨ 非严格模式，支持更多 LaTeX 命令
-                    trust: true           // ✨ 信任模式，允许 HTML 和扩展功能
+                    trust: true,          // ✨ 信任模式，允许 HTML 和扩展功能
+                    extensions: ["mhchem"] // ✨ 启用化学方程式支持
                 });
                 
                 // ✨ 应用自定义样式（如果启用）
