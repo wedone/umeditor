@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      9.0.9
+// @version      9.1.0
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -19,7 +19,7 @@
     // ========================================
 
     /** 脚本版本号（从元数据中提取） */
-    var SCRIPT_VERSION = '9.0.9';
+    var SCRIPT_VERSION = '9.1.0';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -293,6 +293,38 @@
         tmp = tmp.replace(/\n{2,}/g, '<br><br>');
         tmp = tmp.replace(/\n/g, '<br>');
         return tmp;
+    }
+
+    /**
+     * 更新进度条显示
+     * @param {number} progress 进度（0-100）
+     * @param {string} message 进度消息
+     */
+    function updateProgress(progress, message){
+        var progressEl = document.getElementById('um-inject-progress');
+        var progressBar = document.getElementById('um-inject-progress-bar');
+        var progressText = document.getElementById('um-progress-text');
+        
+        if(progressEl && progressBar && progressText){
+            // 显示进度条区域
+            if(progress > 0 && progress < 100){
+                progressEl.style.display = 'block';
+            } else if(progress >= 100){
+                // 完成后延迟隐藏进度条
+                setTimeout(function(){
+                    progressEl.style.display = 'none';
+                }, 1000);
+            }
+            
+            // 更新进度条宽度
+            progressBar.style.width = progress + '%';
+            progressText.textContent = progress + '%';
+            
+            // 在调试模式下输出进度信息
+            if(message && DEBUG_MODE){
+                console.log('📊 进度:', progress + '%', message);
+            }
+        }
     }
 
     /**
@@ -923,6 +955,18 @@
                     </div>
                     <textarea id="um-inject-mixed" style="width:100%;height:180px;border:1px solid rgba(0,0,0,0.06);padding:8px;border-radius:6px;resize:vertical;font-family:Menlo,Consolas,monospace;font-size:13px"></textarea>
                 </div>
+                
+                <!-- 进度条区域 -->
+                <div id="um-inject-progress" style="display:none;margin:8px 0;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+                        <span style="font-size:12px;color:#666;">处理进度</span>
+                        <span id="um-progress-text" style="font-size:11px;color:#999;font-family:Menlo,Consolas,monospace">0%</span>
+                    </div>
+                    <div style="width:100%;height:6px;background:#f0f0f0;border-radius:3px;overflow:hidden;">
+                        <div id="um-inject-progress-bar" style="width:0%;height:100%;background:linear-gradient(90deg,#b65a00,#9b3a00);border-radius:3px;transition:width 0.3s ease;"></div>
+                    </div>
+                </div>
+                
                 <div style="display:flex;align-items:center;justify-content:space-between;padding-top:4px">
                     <div style="display:flex;align-items:center">
                         <button id="um-clear-editor" aria-label="清空编辑器" style="background:#ff4d4f;color:#fff;border:none;padding:8px 10px;border-radius:6px;cursor:pointer">清空编辑器</button>
@@ -1355,6 +1399,9 @@
             return;
         }
 
+        // 初始化进度条
+        updateProgress(0, '开始处理内容...');
+
         // ========== 步骤 1：单公式快速路径 ==========
         try{
             var whole = String(mixedText || '').trim();
@@ -1362,6 +1409,7 @@
             var mFull = whole.match(fullRe);
 
             if(mFull){
+                updateProgress(10, '检测到单公式，正在分析复杂度...');
                 var token = mFull[1];
                 var stripped = stripLatexDelimiters(token);
                 var normalizedWhole = normalizeLatexForMathQuill(stripped.latex);
@@ -1372,10 +1420,12 @@
                 if (!isSimple) {
                     // 复杂公式：直接渲染为图片
                     console.log('🔍 单公式（复杂）→ 渲染为图片');
+                    updateProgress(20, '复杂公式，准备渲染为图片...');
                     // 不使用 MathQuill，跳到混合内容路径处理
                 } else {
                     // 简单公式：尝试 MathQuill 渲染
                     console.log('🔍 单公式（简单）→ 尝试 MathQuill');
+                    updateProgress(20, '简单公式，尝试 MathQuill 渲染...');
                     try{
                         var inst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
                         if(inst && inst.win){
@@ -1402,6 +1452,7 @@
 
                                     var targetInst = getEditorInstanceById(detectEditorId()) || getEditorInstanceById('myEditor');
                                     if(targetInst && targetInst.ed && typeof targetInst.ed.execCommand === 'function'){
+                                        updateProgress(100, '单公式插入完成');
                                         targetInst.ed.execCommand('inserthtml', outer);
                                         return;
                                     }
@@ -1413,6 +1464,7 @@
 
                         // 回退到 execCommand('formula')
                         if(typeof editor.execCommand === 'function'){
+                            updateProgress(100, '单公式插入完成');
                             editor.execCommand('formula', normalizedWhole);
                             return;
                         }
@@ -1426,6 +1478,8 @@
         }
 
         // ========== 步骤 2：混合内容路径 ==========
+
+        updateProgress(15, '分析混合内容...');
 
         // 2a. 用占位符保护 LaTeX 片段
         var latexRe = /(\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|\$[^\$]+\$)/g;
@@ -1441,6 +1495,7 @@
         var complexTokens = [];  // 需要渲染为图片的复杂公式
         if (tokens.length > 0) {
             console.log('🔍 开始判断', tokens.length, '个公式的复杂度...');
+            updateProgress(20, '分析 ' + tokens.length + ' 个公式的复杂度...');
 
             for (var i = 0; i < tokens.length; i++) {
                 var tkn = tokens[i].raw;
@@ -1540,11 +1595,19 @@
 
         // 2d. 将占位符替换为公式 HTML（复杂公式渲染为图片，简单公式使用 MathQuill）
         // 使用 for 循环 + await 确保顺序处理（避免并发导致的问题）
+        if (tokens.length > 0) {
+            updateProgress(30, '开始渲染 ' + tokens.length + ' 个公式...');
+        }
+        
         for(var i=0; i<tokens.length; i++){
             // 使用 IIFE 创建独立作用域，避免闭包捕获问题
             await (async function(index){
                 var tkn = tokens[index].raw;
                 var tokenId = tokens[index].id;
+
+                // 更新进度
+                var progress = 30 + Math.floor((index / tokens.length) * 60);
+                updateProgress(progress, '渲染公式 ' + (index+1) + '/' + tokens.length + '...');
 
                 // 检查该公式是否为复杂公式
                 var isComplex = false;
@@ -1588,17 +1651,23 @@
 
         // 2e. 插入到编辑器
         try{
+            updateProgress(95, '准备插入到编辑器...');
+            
             var id = detectEditorId();
             var inst = getEditorInstanceById(id) || getEditorInstanceById('myEditor');
             if(!inst || !inst.ed){
+                updateProgress(0, '');
                 return alert('找不到可访问的编辑器实例（可能在跨域 iframe 中）');
             }
 
             console.log('injectMixedContentToUM -> target id=', id, 'found at', inst.where, 'src=', inst.src || '');
             inst.ed.execCommand('inserthtml', html);
+            
+            updateProgress(100, '内容插入完成！');
 
         }catch(e){
             console.error('inserthtml failed', e);
+            updateProgress(0, '');
             alert('插入失败: ' + (e && e.message ? e.message : e));
         }
     }
