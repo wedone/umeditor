@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      9.0.8
+// @version      9.0.9
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -19,7 +19,7 @@
     // ========================================
 
     /** 脚本版本号（从元数据中提取） */
-    var SCRIPT_VERSION = '9.0.8';
+    var SCRIPT_VERSION = '9.0.9';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -49,7 +49,7 @@
     var IMAGE_SIZE_CONFIG = {
         baseFontSize: '1em',     // ✨ KaTeX 渲染时使用正常字体大小
         renderScale: 2,          // ✨ html2canvas 渲染倍率（2x 清晰度）
-        displayScale: 0.72,      // ✨ 最终显示时缩小到 72%（匹配官方）
+        displayScale: 0.75,      // ✨ 最终显示时缩小到 72%（匹配官方）
         debugSize: false         // 是否在控制台输出尺寸调试信息
     };
 
@@ -70,7 +70,7 @@
         css: `
             /* v6.6.8 修正：调整 KaTeX 分数样式 - 使用更精确的选择器 */
             .katex .mfrac > span > span {
-                font-size: 0.9em !important;  /* 调大分子分母字体 */
+                font-size: 1.4em !important;  /* 调大分子分母字体 */
             }
             .katex .mfrac .frac-line {
                 border-top-width: 0.08em !important;  /* 调整分数线粗细 */
@@ -146,113 +146,125 @@
     }
 
     /**
+     * 计算 LaTeX 公式复杂度得分（基于符号权重和嵌套深度）
+     * 
+     * 评估方法：
+     * 1. 符号权重分：统计高级结构符号（积分、分式、矩阵等），每种符号对应固定权重
+     * 2. 嵌套深度分：计算 {} 的最大嵌套层数
+     * 3. 综合得分 = 符号权重分 * 0.7 + 嵌套深度分 * 0.3
+     * 
+     * 判断逻辑：
+     * - 得分 >= 4.0 → 复杂（用图片）
+     * - 得分 < 4.0 → 简单（用 MathQuill）
+     * 
+     * @param {string} latex 纯 LaTeX 代码（不含定界符）
+     * @returns {Object} {isSimple: boolean, score: number, details: Object}
+     */
+    function calculateComplexity(latex){
+        if(!latex) return {isSimple: true, score: 0, details: {symbolScore: 0, depthScore: 0}};
+        var s = String(latex).trim();
+        if(s.length === 0) return {isSimple: true, score: 0, details: {symbolScore: 0, depthScore: 0}};
+
+        // 1. 计算符号权重分
+        var symbolScore = 0;
+        var complexSymbols = [
+            // 高复杂度符号（权重 4+）
+            {regex: /\\begin\{matrix\}|\\begin\{pmatrix\}|\\begin\{bmatrix\}|\\begin\{vmatrix\}|\\begin\{array\}/g, weight: 5, name: '矩阵/数组'},
+            {regex: /\\begin\{cases\}|\\begin\{aligned\}|\\begin\{align\}/g, weight: 5, name: '分段/对齐环境'},
+            
+            // 中高复杂度符号（权重 3-4）
+            {regex: /\\int|\\iint|\\iiint|\\oint/g, weight: 3.5, name: '积分'},
+            {regex: /\\sum|\\prod/g, weight: 3, name: '求和/乘积'},
+            {regex: /\\lim|\\limsup|\\liminf/g, weight: 3, name: '极限'},
+            {regex: /\\bigcup|\\bigcap|\\bigvee|\\bigwedge/g, weight: 3, name: '大运算符'},
+            
+            // 中复杂度符号（权重 2-3）
+            {regex: /\\frac|\\dfrac|\\tfrac/g, weight: 2.5, name: '分式'},
+            {regex: /\\sqrt|\\root/g, weight: 2, name: '根号'},
+            {regex: /\\binom|\\choose/g, weight: 2.5, name: '组合数'},
+            {regex: /\\forall|\\exists|\\nexists/g, weight: 2.5, name: '逻辑量词'},
+            {regex: /\\left|\\right/g, weight: 2, name: '自适应括号'},
+            
+            // 低中复杂度符号（权重 1.5-2）
+            {regex: /\\sin|\\cos|\\tan|\\cot|\\sec|\\csc/g, weight: 1.5, name: '三角函数'},
+            {regex: /\\log|\\ln|\\lg|\\exp/g, weight: 1.5, name: '对数/指数函数'},
+            {regex: /\\vec|\\overrightarrow|\\overleftarrow/g, weight: 1.8, name: '向量'},
+            {regex: /\\dot|\\ddot|\\hat|\\tilde|\\bar/g, weight: 1.5, name: '上标符号'},
+            {regex: /\\mathbb|\\mathcal|\\mathfrak|\\mathbf/g, weight: 1.5, name: '特殊字体'},
+            
+            // 低复杂度符号（权重 1）
+            {regex: /\\alpha|\\beta|\\gamma|\\delta|\\epsilon|\\theta|\\lambda|\\mu|\\pi|\\sigma|\\phi|\\omega/gi, weight: 0.8, name: '希腊字母'},
+            {regex: /\\in|\\notin|\\subset|\\subseteq|\\supset|\\supseteq/g, weight: 1, name: '集合符号'},
+            {regex: /\\pm|\\mp|\\times|\\div|\\cdot/g, weight: 0.5, name: '基础运算符'}
+        ];
+
+        for(var i = 0; i < complexSymbols.length; i++){
+            var matches = s.match(complexSymbols[i].regex);
+            if(matches){
+                var count = matches.length;
+                var contribution = count * complexSymbols[i].weight;
+                symbolScore += contribution;
+                if(DEBUG_MODE) console.log('  � 符号匹配:', complexSymbols[i].name, '数量:', count, '权重:', complexSymbols[i].weight, '贡献:', contribution.toFixed(2));
+            }
+        }
+
+        // 2. 计算嵌套深度分
+        var currentDepth = 0;
+        var maxDepth = 0;
+        for(var j = 0; j < s.length; j++){
+            var char = s.charAt(j);
+            if(char === '{'){
+                currentDepth++;
+                maxDepth = Math.max(maxDepth, currentDepth);
+            } else if(char === '}'){
+                currentDepth = Math.max(currentDepth - 1, 0);
+            }
+        }
+        var depthScore = maxDepth;
+
+        // 3. 计算字符长度兜底分（避免漏判冗长但简单的公式）
+        var lengthScore = s.length * 0.2; // 每个字符贡献 0.02 分
+
+        // 4. 综合得分计算
+        var finalScore = symbolScore * 0.7 + depthScore * 0.3 + lengthScore;
+
+        // 5. 判断阈值（收紧：从 5.0 降低到 4.0，让更多公式走图片）
+        var COMPLEXITY_THRESHOLD = 2.5;
+        var isSimple = finalScore < COMPLEXITY_THRESHOLD;
+
+        if(DEBUG_MODE){
+            console.log('� 复杂度评估:', s.substring(0, 40), '...');
+            console.log('  - 符号权重分:', symbolScore.toFixed(2));
+            console.log('  - 嵌套深度分:', depthScore);
+            console.log('  - 字符长度分:', lengthScore.toFixed(2));
+            console.log('  - 综合得分:', finalScore.toFixed(2), '(阈值:', COMPLEXITY_THRESHOLD + ')');
+            console.log('  - 判定结果:', isSimple ? '✅ 简单（MathQuill）' : '🔥 复杂（图片）');
+        }
+
+        return {
+            isSimple: isSimple,
+            score: finalScore,
+            details: {
+                symbolScore: symbolScore,
+                depthScore: depthScore,
+                lengthScore: lengthScore
+            }
+        };
+    }
+
+    /**
      * 判断 LaTeX 公式是否简单（适合 MathQuill 渲染）
      * 
-     * 简单公式定义（严格）：
-     * - 单个变量/数字：x, y, a, 1, 2
-     * - 简单上下标：x^2, a_1, x^{2}（仅支持单层）
-     * - 基本运算符：+, -, =, <, >
-     * - 简单括号：单层圆括号
-     * 
-     * 复杂公式（直接渲染为图片）：
-     * - 任何 \begin 环境（matrix, cases, array, align 等）
-     * - 分数：\frac（任何分数都走图片）
-     * - 根式：\sqrt（任何根式都走图片）
-     * - 积分/求和：\int, \sum, \prod
-     * - 极限：\lim
-     * - 复杂括号：\left, \right
-     * - 希腊字母组合：多个希腊字母
-     * - 长公式：超过 30 个字符
-     * - 多个上下标：超过 2 个
+     * 使用复杂度评估系统：
+     * - 得分 >= 4.0 → 复杂（用图片）
+     * - 得分 < 4.0 → 简单（用 MathQuill）
      * 
      * @param {string} latex 纯 LaTeX 代码（不含定界符）
      * @returns {boolean} true=简单（用 MathQuill），false=复杂（用图片）
      */
     function isSimpleFormula(latex){
-        if(!latex) return true;
-        var s = String(latex).trim();
-
-        // 空公式 → 简单
-        if(s.length === 0) return true;
-
-        // 长度检测：超过 30 个字符 → 复杂（收紧从 50 → 30）
-        if(s.length > 30){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（长度）:', s.substring(0, 30), '长度:', s.length);
-            return false;
-        }
-
-        // 任何 \begin 环境 → 复杂
-        if(s.indexOf('\\begin{') !== -1){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（环境）:', s.substring(0, 30));
-            return false;
-        }
-
-        // 分数 \frac → 复杂（任何分数都走图片）
-        if(s.indexOf('\\frac') !== -1){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（分数）:', s.substring(0, 30));
-            return false;
-        }
-
-        // 根式 \sqrt → 复杂（任何根式都走图片）
-        if(s.indexOf('\\sqrt') !== -1){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（根式）:', s.substring(0, 30));
-            return false;
-        }
-
-        // 积分/求和/极限等符号 → 复杂
-        var complexSymbols = [
-            '\\int', '\\iint', '\\iiint',
-            '\\sum', '\\prod',
-            '\\lim',
-            '\\bigcup', '\\bigcap',
-            '\\oint'
-        ];
-        for(var i=0; i<complexSymbols.length; i++){
-            if(s.indexOf(complexSymbols[i]) !== -1){
-                if(DEBUG_MODE) console.log('🔍 复杂公式（符号）:', s.substring(0, 30));
-                return false;
-            }
-        }
-
-        // 复杂括号：\left 和 \right → 复杂
-        if(s.indexOf('\\left') !== -1 || s.indexOf('\\right') !== -1){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（复杂括号）:', s.substring(0, 30));
-            return false;
-        }
-
-        // 上下标数量检测：超过 2 个 ^ 或 _ → 复杂
-        var superscriptCount = (s.match(/\^/g) || []).length;
-        var subscriptCount = (s.match(/_/g) || []).length;
-        if(superscriptCount + subscriptCount > 2){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（多个上下标）:', s.substring(0, 30));
-            return false;
-        }
-
-        // 希腊字母数量检测：超过 1 个希腊字母 → 复杂
-        var greekLetters = [
-            '\\alpha', '\\beta', '\\gamma', '\\delta', '\\epsilon',
-            '\\theta', '\\lambda', '\\mu', '\\pi', '\\sigma',
-            '\\phi', '\\omega', '\\Omega', '\\Gamma', '\\Delta'
-        ];
-        var greekCount = 0;
-        for(var i=0; i<greekLetters.length; i++){
-            if(s.indexOf(greekLetters[i]) !== -1){
-                greekCount++;
-            }
-        }
-        if(greekCount > 1){
-            if(DEBUG_MODE) console.log('🔍 复杂公式（多个希腊字母）:', s.substring(0, 30));
-            return false;
-        }
-
-        // 其他情况 → 简单
-        // 允许的简单公式示例：
-        // - 单变量：x, y, a
-        // - 简单上下标：x^2, a_1, x_{max}
-        // - 简单运算：x + y, a = b, 2 + 3
-        // - 单个希腊字母：\pi, \theta
-        if(DEBUG_MODE) console.log('✅ 简单公式:', s.substring(0, 30));
-        return true;
+        var result = calculateComplexity(latex);
+        return result.isSimple;
     }
 
     /**
