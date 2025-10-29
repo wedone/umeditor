@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         橙果错题助手
 // @namespace    http://example.com/
-// @version      9.1.1
+// @version      9.1.2
 // @updateURL    http://127.0.0.1:8000/scripts/um-inject.user.js
 // @downloadURL  https://gh-proxy.com/https://raw.githubusercontent.com/wedone/umeditor/refs/heads/marked/scripts/um-inject.user.js
 // @description  快速在页面中注入文本与 LaTeX 到 UMEditor（浮动面板，支持热键 Ctrl+Alt+I）
@@ -19,7 +19,7 @@
     // ========================================
 
     /** 脚本版本号（从元数据中提取） */
-    var SCRIPT_VERSION = '9.1.1';
+    var SCRIPT_VERSION = '9.1.2';
 
     /** 调试模式：true 时输出详细日志，false 时只输出关键信息 */
     var DEBUG_MODE = false;
@@ -1059,12 +1059,49 @@
     }
 
     /**
+     * 启动自动隐藏计时器
+     */
+    function startAutoHideTimer(){
+        if(window.umInjectAutoHideTimer){
+            clearTimeout(window.umInjectAutoHideTimer);
+        }
+        var panel = document.getElementById('um-inject-panel');
+        if(panel && panel.style.display !== 'none'){
+            window.umInjectAutoHideTimer = setTimeout(function(){
+                panel.style.display = 'none';
+            }, 5000); // 5秒后自动隐藏
+        }
+    }
+
+    /**
+     * 停止自动隐藏计时器
+     */
+    function stopAutoHideTimer(){
+        if(window.umInjectAutoHideTimer){
+            clearTimeout(window.umInjectAutoHideTimer);
+            window.umInjectAutoHideTimer = null;
+        }
+    }
+
+    /**
      * 绑定面板按钮和交互事件
      */
     function bindPanelEvents(){
+        var panel = document.getElementById('um-inject-panel');
+
+        // 面板获得焦点时停止计时器
+        panel.addEventListener('mouseenter', function(){
+            stopAutoHideTimer();
+        });
+
+        // 面板失去焦点时启动计时器
+        panel.addEventListener('mouseleave', function(){
+            startAutoHideTimer();
+        });
+
         // 关闭按钮
         document.getElementById('um-inject-close').addEventListener('click', function(){
-            document.getElementById('um-inject-panel').style.display = 'none';
+            panel.style.display = 'none';
         });
 
         // 粘贴按钮
@@ -1094,6 +1131,11 @@
 
         // 按钮 hover 和 focus 美化
         enhanceButtonInteractions();
+
+        // 初始化时启动计时器（如果面板是可见的）
+        if(panel.style.display !== 'none'){
+            startAutoHideTimer();
+        }
     }
 
     /**
@@ -1269,14 +1311,33 @@
         h.title = '橙果错题助手 - 点击展开/收起面板';
         h.textContent = '🍊';
 
-        var fullHost = window.location.hostname || 'site';
+        // 鼠标悬停时自动弹出面板
+        h.addEventListener('mouseenter', function(){
+            if(!document.getElementById('um-inject-panel')) createPanel();
+            var p = document.getElementById('um-inject-panel');
+            if(!p) return;
+            p.style.display = 'block';
+            
+            // 停止自动隐藏计时器
+            if(window.umInjectAutoHideTimer){
+                clearTimeout(window.umInjectAutoHideTimer);
+                window.umInjectAutoHideTimer = null;
+            }
+        });
 
-        // 点击切换面板
+        // 点击切换面板（作为备用方式）
         h.addEventListener('click', function(){
             if(!document.getElementById('um-inject-panel')) createPanel();
             var p = document.getElementById('um-inject-panel');
             if(!p) return;
-            p.style.display = (p.style.display === 'none' || !p.style.display) ? 'block' : 'none';
+            
+            var isOpening = (p.style.display === 'none' || !p.style.display);
+            p.style.display = isOpening ? 'block' : 'none';
+            
+            // 如果正在打开面板，停止自动隐藏计时器
+            if(isOpening){
+                stopAutoHideTimer();
+            }
         });
 
         // 按下时视觉反馈
@@ -1287,22 +1348,6 @@
         document.addEventListener('mouseup', function(){
             h.style.transform = '';
             h.style.boxShadow = '0 6px 20px ' + THEME.shadow;
-        });
-
-        // 悬停展开显示完整域名
-        h.addEventListener('mouseenter', function(){
-            h.style.width = '170px';
-            h.style.borderRadius = '8px';
-            h.style.padding = '0 12px';
-            h.style.justifyContent = 'flex-start';
-            h.textContent = '橙果错题助手 — ' + fullHost.replace(/^www\./,'');
-        });
-        h.addEventListener('mouseleave', function(){
-            h.style.width = '44px';
-            h.style.borderRadius = '8px';
-            h.style.padding = '';
-            h.style.justifyContent = 'center';
-            h.textContent = '🍊';
         });
 
         document.body.appendChild(h);
@@ -1712,6 +1757,9 @@
             var panel = document.getElementById('um-inject-panel');
             panel.style.display = 'block';
 
+            // 停止自动隐藏计时器
+            stopAutoHideTimer();
+            
             var mixedEl = document.getElementById('um-inject-mixed');
             if(mixedEl) mixedEl.focus();
         }
