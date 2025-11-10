@@ -1,18 +1,66 @@
 // ==UserScript==
 // @name         橙果错题本简单编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.0.7
-// @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题
+// @version      1.0.8
+// @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览
 // @author       You
 // @match        https://ctb.91chengguo.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @connect      www.91chengguo.com
+// @require      https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js
+// @require      https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js
+// @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css
 // ==/UserScript==
 
 (function() {
     'use strict';
+
+    // 动态加载KaTeX CSS
+    function loadKatexCSS() {
+        if (document.querySelector('link[href*="katex"]')) return;
+
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+        document.head.appendChild(link);
+    }
+
+    // 使用KaTeX渲染内容
+    function renderWithKaTeX(element, content) {
+        if (!element || !content) return;
+
+        // 保持原内容的换行和排版
+        let formattedContent = content;
+
+        // 1. 处理换行：\n → <br>
+        formattedContent = formattedContent.replace(/\n/g, '<br>');
+
+        // 2. 处理空格：空格 → &nbsp;
+        formattedContent = formattedContent.replace(/ /g, '&nbsp;');
+
+        element.innerHTML = formattedContent;
+
+        if (window.renderMathInElement) {
+            try {
+                renderMathInElement(element, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false},
+                        {left: '\\(', right: '\\)', display: false},
+                        {left: '\\[', right: '\\]', display: true}
+                    ],
+                    throwOnError: false,
+                    output: 'html'
+                });
+            } catch (e) {
+                console.warn('KaTeX渲染失败:', e);
+                // 如果KaTeX渲染失败，回退到普通文本显示
+                element.innerHTML = formattedContent;
+            }
+        }
+    }
 
     // 获取登录token
     function getLoginToken() {
@@ -223,7 +271,7 @@
                                 border-radius: 6px;
                                 padding: 12px;
                                 background: #fafafa;
-                                height: 150px;
+                                height: 200px;
                                 font-size: 14px;
                                 line-height: 1.6;
                                 color: #333;
@@ -276,7 +324,7 @@
                                 border-radius: 6px;
                                 padding: 12px;
                                 background: #fafafa;
-                                height: 150px;
+                                height: 200px;
                                 font-size: 14px;
                                 line-height: 1.6;
                                 color: #333;
@@ -512,8 +560,7 @@
 
         // 更新题目预览
         if (questionText) {
-            document.getElementById('question-preview').innerHTML =
-                questionText.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
+            renderWithKaTeX(document.getElementById('question-preview'), questionText);
         } else {
             document.getElementById('question-preview').innerHTML =
                 '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题目预览将在这里显示...</div>';
@@ -521,8 +568,7 @@
 
         // 更新答案预览
         if (answerText) {
-            document.getElementById('answer-preview').innerHTML =
-                answerText.replace(/\n/g, '<br>').replace(/ /g, '&nbsp;');
+            renderWithKaTeX(document.getElementById('answer-preview'), answerText);
         } else {
             document.getElementById('answer-preview').innerHTML =
                 '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">答案预览将在这里显示...</div>';
@@ -608,6 +654,9 @@
 
     // 初始化
     function init() {
+        // 加载KaTeX CSS
+        loadKatexCSS();
+        
         // 等待页面加载完成
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', addEditorButton);
