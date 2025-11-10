@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题本简单编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.0.5
+// @version      1.0.7
 // @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题
 // @author       You
 // @match        https://ctb.91chengguo.com/*
@@ -394,8 +394,27 @@
 
         getProblemDetail(problemId, function(result) {
             if (result.success && result.content) {
-                const questionContent = result.content.question || '';
-                const answerContent = result.content.answer || '';
+                let questionContent = result.content.question || '';
+                let answerContent = result.content.answer || '';
+
+                console.log('原始题目内容:', questionContent);
+                console.log('原始答案内容:', answerContent);
+
+                // 调试：检查是否包含换行符
+                console.log('题目内容包含换行符:', questionContent.includes('\n'));
+                console.log('答案内容包含换行符:', answerContent.includes('\n'));
+
+                // 替换实际的换行符及其周围的空格
+                const beforeQuestion = questionContent;
+                const beforeAnswer = answerContent;
+                
+                questionContent = questionContent.replace(/\s*\n\s*/g, ' ');
+                answerContent = answerContent.replace(/\s*\n\s*/g, ' ');
+
+                console.log('过滤后题目内容:', questionContent);
+                console.log('过滤后答案内容:', answerContent);
+                console.log('题目内容变化:', beforeQuestion !== questionContent);
+                console.log('答案内容变化:', beforeAnswer !== answerContent);
 
                 document.getElementById('question-editor').value = questionContent;
                 document.getElementById('answer-editor').value = answerContent;
@@ -423,7 +442,17 @@
 
         getProblemDetail(problemId, function(result) {
             if (result.success && result.content) {
-                const questionContent = result.content.question || '';
+                let questionContent = result.content.question || '';
+
+                console.log('加载题目 - 原始内容:', questionContent);
+                console.log('加载题目 - 包含换行符:', questionContent.includes('\n'));
+
+                // 替换实际的换行符及其周围的空格
+                const beforeReplace = questionContent;
+                questionContent = questionContent.replace(/\s*\n\s*/g, ' ');
+                console.log('加载题目 - 替换后:', questionContent);
+                console.log('加载题目 - 替换是否生效:', beforeReplace !== questionContent);
+
                 document.getElementById('question-editor').value = questionContent;
                 
                 // 更新预览
@@ -449,7 +478,17 @@
 
         getProblemDetail(problemId, function(result) {
             if (result.success && result.content) {
-                const answerContent = result.content.answer || '';
+                let answerContent = result.content.answer || '';
+
+                console.log('加载答案 - 原始内容:', answerContent);
+                console.log('加载答案 - 包含换行符:', answerContent.includes('\n'));
+
+                // 替换实际的换行符及其周围的空格
+                const beforeReplace = answerContent;
+                answerContent = answerContent.replace(/\s*\n\s*/g, ' ');
+                console.log('加载答案 - 替换后:', answerContent);
+                console.log('加载答案 - 替换是否生效:', beforeReplace !== answerContent);
+
                 document.getElementById('answer-editor').value = answerContent;
                 
                 // 更新预览
