@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题本简单编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.0.8
+// @version      1.0.9
 // @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览
 // @author       You
 // @match        https://ctb.91chengguo.com/*
@@ -27,39 +27,108 @@
         document.head.appendChild(link);
     }
 
-    // 使用KaTeX渲染内容
+    // 使用KaTeX渲染内容，支持图片预览
     function renderWithKaTeX(element, content) {
         if (!element || !content) return;
 
-        // 保持原内容的换行和排版
-        let formattedContent = content;
+        // 检查内容中是否包含图片标签
+        const hasImages = /<img[^>]*>/i.test(content);
+        
+        if (hasImages) {
+            // 如果包含图片，直接设置innerHTML（保留HTML标签）
+            element.innerHTML = content;
+            
+            // 仍然尝试渲染LaTeX公式
+            if (window.renderMathInElement) {
+                try {
+                    renderMathInElement(element, {
+                        delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '$', right: '$', display: false},
+                            {left: '\\(', right: '\\)', display: false},
+                            {left: '\\[', right: '\\]', display: true}
+                        ],
+                        throwOnError: false,
+                        output: 'html'
+                    });
+                } catch (e) {
+                    console.warn('KaTeX渲染失败:', e);
+                }
+            }
+        } else {
+            // 如果不包含图片，使用原来的处理方式
+            let formattedContent = content;
 
-        // 1. 处理换行：\n → <br>
-        formattedContent = formattedContent.replace(/\n/g, '<br>');
+            // 1. 处理换行：\n → <br>
+            formattedContent = formattedContent.replace(/\n/g, '<br>');
 
-        // 2. 处理空格：空格 → &nbsp;
-        formattedContent = formattedContent.replace(/ /g, '&nbsp;');
+            // 2. 处理空格：空格 → &nbsp;
+            formattedContent = formattedContent.replace(/ /g, '&nbsp;');
 
-        element.innerHTML = formattedContent;
+            element.innerHTML = formattedContent;
 
-        if (window.renderMathInElement) {
-            try {
-                renderMathInElement(element, {
-                    delimiters: [
-                        {left: '$$', right: '$$', display: true},
-                        {left: '$', right: '$', display: false},
-                        {left: '\\(', right: '\\)', display: false},
-                        {left: '\\[', right: '\\]', display: true}
-                    ],
-                    throwOnError: false,
-                    output: 'html'
-                });
-            } catch (e) {
-                console.warn('KaTeX渲染失败:', e);
-                // 如果KaTeX渲染失败，回退到普通文本显示
-                element.innerHTML = formattedContent;
+            if (window.renderMathInElement) {
+                try {
+                    renderMathInElement(element, {
+                        delimiters: [
+                            {left: '$$', right: '$$', display: true},
+                            {left: '$', right: '$', display: false},
+                            {left: '\\(', right: '\\)', display: false},
+                            {left: '\\[', right: '\\]', display: true}
+                        ],
+                        throwOnError: false,
+                        output: 'html'
+                    });
+                } catch (e) {
+                    console.warn('KaTeX渲染失败:', e);
+                    element.innerHTML = formattedContent;
+                }
             }
         }
+    }
+
+    // 保护HTML标签并过滤换行符
+    function protectHtmlTagsAndFilterNewlines(content) {
+        if (!content) return content;
+        
+        // 如果内容不包含HTML标签，直接过滤换行符
+        if (!/<[^>]+>/i.test(content)) {
+            return content.replace(/\s*\n\s*/g, ' ');
+        }
+        
+        // 如果包含HTML标签，使用更复杂的方法
+        // 将内容分割成文本和标签部分
+        const parts = [];
+        let currentIndex = 0;
+        const tagRegex = /<[^>]+>/g;
+        let match;
+        
+        while ((match = tagRegex.exec(content)) !== null) {
+            // 添加标签前的文本
+            if (match.index > currentIndex) {
+                const text = content.slice(currentIndex, match.index);
+                parts.push({ type: 'text', content: text });
+            }
+            // 添加标签
+            parts.push({ type: 'tag', content: match[0] });
+            currentIndex = match.index + match[0].length;
+        }
+        
+        // 添加剩余文本
+        if (currentIndex < content.length) {
+            const text = content.slice(currentIndex);
+            parts.push({ type: 'text', content: text });
+        }
+        
+        // 处理文本部分，过滤换行符
+        const processedParts = parts.map(part => {
+            if (part.type === 'text') {
+                return part.content.replace(/\s*\n\s*/g, ' ');
+            }
+            return part.content;
+        });
+        
+        return processedParts.join('');
     }
 
     // 获取登录token
@@ -448,16 +517,19 @@
                 console.log('原始题目内容:', questionContent);
                 console.log('原始答案内容:', answerContent);
 
-                // 调试：检查是否包含换行符
+                // 调试：检查是否包含换行符和图片
                 console.log('题目内容包含换行符:', questionContent.includes('\n'));
                 console.log('答案内容包含换行符:', answerContent.includes('\n'));
+                console.log('题目内容包含图片:', /<img[^>]*>/i.test(questionContent));
+                console.log('答案内容包含图片:', /<img[^>]*>/i.test(answerContent));
 
-                // 替换实际的换行符及其周围的空格
+                // 替换实际的换行符及其周围的空格，但保留HTML标签
                 const beforeQuestion = questionContent;
                 const beforeAnswer = answerContent;
                 
-                questionContent = questionContent.replace(/\s*\n\s*/g, ' ');
-                answerContent = answerContent.replace(/\s*\n\s*/g, ' ');
+                // 使用更精确的方法：先保护HTML标签，然后处理换行符，最后恢复标签
+                questionContent = protectHtmlTagsAndFilterNewlines(questionContent);
+                answerContent = protectHtmlTagsAndFilterNewlines(answerContent);
 
                 console.log('过滤后题目内容:', questionContent);
                 console.log('过滤后答案内容:', answerContent);
@@ -494,12 +566,14 @@
 
                 console.log('加载题目 - 原始内容:', questionContent);
                 console.log('加载题目 - 包含换行符:', questionContent.includes('\n'));
+                console.log('加载题目 - 包含图片:', /<img[^>]*>/i.test(questionContent));
 
-                // 替换实际的换行符及其周围的空格
+                // 使用保护HTML标签并过滤换行符的函数
                 const beforeReplace = questionContent;
-                questionContent = questionContent.replace(/\s*\n\s*/g, ' ');
-                console.log('加载题目 - 替换后:', questionContent);
-                console.log('加载题目 - 替换是否生效:', beforeReplace !== questionContent);
+                questionContent = protectHtmlTagsAndFilterNewlines(questionContent);
+                
+                console.log('加载题目 - 过滤后:', questionContent);
+                console.log('加载题目 - 过滤是否生效:', beforeReplace !== questionContent);
 
                 document.getElementById('question-editor').value = questionContent;
                 
@@ -530,12 +604,14 @@
 
                 console.log('加载答案 - 原始内容:', answerContent);
                 console.log('加载答案 - 包含换行符:', answerContent.includes('\n'));
+                console.log('加载答案 - 包含图片:', /<img[^>]*>/i.test(answerContent));
 
-                // 替换实际的换行符及其周围的空格
+                // 使用保护HTML标签并过滤换行符的函数
                 const beforeReplace = answerContent;
-                answerContent = answerContent.replace(/\s*\n\s*/g, ' ');
-                console.log('加载答案 - 替换后:', answerContent);
-                console.log('加载答案 - 替换是否生效:', beforeReplace !== answerContent);
+                answerContent = protectHtmlTagsAndFilterNewlines(answerContent);
+                
+                console.log('加载答案 - 过滤后:', answerContent);
+                console.log('加载答案 - 过滤是否生效:', beforeReplace !== answerContent);
 
                 document.getElementById('answer-editor').value = answerContent;
                 
