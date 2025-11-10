@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题本简单编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.0.9
+// @version      1.1.0
 // @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览
 // @author       You
 // @match        https://ctb.91chengguo.com/*
@@ -9,9 +9,10 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @connect      www.91chengguo.com
-// @require      https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js
-// @require      https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js
-// @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css
+// @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js
+// @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js
+// @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js
+// @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css
 // ==/UserScript==
 
 (function() {
