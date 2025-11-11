@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         橙果错题本简单编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
-// @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览
+// @version      1.3.1
+// @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题目和答案，支持双栏编辑
 // @author       You
 // @match        https://ctb.91chengguo.com/*
 // @grant        GM_xmlhttpRequest
@@ -303,9 +303,32 @@
                     ">关闭</button>
                 </div>
                 
-                <div style="display: flex; gap: 20px; flex: 1; overflow: hidden;">
+                <!-- 切换标签 -->
+                <div style="display: flex; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8;">
+                    <button id="tab-question" style="
+                        padding: 8px 16px;
+                        background: #1890ff;
+                        color: white;
+                        border: none;
+                        border-radius: 4px 4px 0 0;
+                        cursor: pointer;
+                        font-size: 14px;
+                        margin-right: 5px;
+                    ">📝 题目</button>
+                    <button id="tab-answer" style="
+                        padding: 8px 16px;
+                        background: #f0f0f0;
+                        color: #666;
+                        border: none;
+                        border-radius: 4px 4px 0 0;
+                        cursor: pointer;
+                        font-size: 14px;
+                    ">📄 答案</button>
+                </div>
+                
+                <div style="flex: 1; overflow: hidden;">
                     <!-- 题目编辑区域 -->
-                    <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                    <div id="question-area" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <label style="font-weight: 600; color: #262626;">题目内容:</label>
                             <button id="load-question" style="
@@ -318,47 +341,89 @@
                                 font-size: 11px;
                             ">📥 加载题目</button>
                         </div>
-                        <textarea id="question-editor" style="
-                            flex: 1;
-                            width: 100%;
-                            padding: 12px;
-                            border: 1px solid #d9d9d9;
-                            border-radius: 6px;
-                            resize: none;
-                            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                            font-size: 13px;
-                            line-height: 1.5;
-                            overflow-y: auto;
-                        " placeholder="输入题目内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                         
-                        <!-- 题目预览 -->
+                        <!-- 题目编辑双栏 -->
+                        <div style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
+                            <!-- 左侧题目内容输入框 -->
+                            <div style="flex: 1; display: flex; flex-direction: column;">
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">题目内容:</label>
+                                <textarea id="question-editor" style="
+                                    flex: 1;
+                                    width: 100%;
+                                    padding: 12px;
+                                    border: 1px solid #d9d9d9;
+                                    border-radius: 6px;
+                                    resize: none;
+                                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                    font-size: 13px;
+                                    line-height: 1.5;
+                                    overflow-y: auto;
+                                " placeholder="输入题目内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
+                            </div>
+                            
+                            <!-- 右侧新增输入框 -->
+                            <div style="flex: 1; display: flex; flex-direction: column;">
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">题目补充:</label>
+                                <textarea id="question-supplement" style="
+                                    flex: 1;
+                                    width: 100%;
+                                    padding: 12px;
+                                    border: 1px solid #d9d9d9;
+                                    border-radius: 6px;
+                                    resize: none;
+                                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                    font-size: 13px;
+                                    line-height: 1.5;
+                                    overflow-y: auto;
+                                " placeholder="输入题目补充内容"></textarea>
+                            </div>
+                        </div>
+                        
+                        <!-- 题目预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
                             <label style="font-weight: 600; color: #262626; font-size: 14px; margin-bottom: 8px; display: block;">
                                 题目预览:
                             </label>
-                            <div id="question-preview" style="
-                                border: 1px solid #e8e8e8;
-                                border-radius: 6px;
-                                padding: 12px;
-                                background: #fafafa;
-                                height: 200px;
-                                font-size: 14px;
-                                line-height: 1.6;
-                                color: #333;
-                                white-space: pre-wrap;
-                                word-wrap: break-word;
-                                overflow-y: auto;
-                                font-family: inherit;
-                            ">
-                                <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                    题目预览将在这里显示...
+                            <div style="display: flex; gap: 15px;">
+                                <!-- 左侧题目内容预览 -->
+                                <div style="flex: 1;">
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">题目内容预览:</label>
+                                    <div id="question-preview" style="
+                                        border: 1px solid #e8e8e8;
+                                        border-radius: 6px;
+                                        padding: 12px;
+                                        background: #fafafa;
+                                        height: 200px;
+                                        overflow-y: auto;
+                                    ">
+                                        <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
+                                            题目内容预览将在这里显示...
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 右侧题目补充预览 -->
+                                <div style="flex: 1;">
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">题目补充预览:</label>
+                                    <div id="question-supplement-preview" style="
+                                        border: 1px solid #e8e8e8;
+                                        border-radius: 6px;
+                                        padding: 12px;
+                                        background: #fafafa;
+                                        height: 200px;
+                                        overflow-y: auto;
+                                    ">
+                                        <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
+                                            题目补充预览将在这里显示...
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     
                     <!-- 答案编辑区域 -->
-                    <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                    <div id="answer-area" style="display: none; flex-direction: column; height: 100%; overflow: hidden;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                             <label style="font-weight: 600; color: #262626;">答案内容:</label>
                             <button id="load-answer" style="
@@ -395,13 +460,7 @@
                                 padding: 12px;
                                 background: #fafafa;
                                 height: 200px;
-                                font-size: 14px;
-                                line-height: 1.6;
-                                color: #333;
-                                white-space: pre-wrap;
-                                word-wrap: break-word;
                                 overflow-y: auto;
-                                font-family: inherit;
                             ">
                                 <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
                                     答案预览将在这里显示...
@@ -462,11 +521,12 @@
 
         // 添加预览更新事件
         const questionEditor = document.getElementById('question-editor');
+        const questionSupplement = document.getElementById('question-supplement');
         const answerEditor = document.getElementById('answer-editor');
         
         let previewTimeout;
         function setupPreviewUpdates() {
-            [questionEditor, answerEditor].forEach(editor => {
+            [questionEditor, questionSupplement, answerEditor].forEach(editor => {
                 editor.addEventListener('input', function() {
                     clearTimeout(previewTimeout);
                     previewTimeout = setTimeout(updatePreviews, 300);
@@ -486,6 +546,15 @@
         
         setupPreviewUpdates();
 
+        // 添加标签切换功能
+        document.getElementById('tab-question').addEventListener('click', function() {
+            switchToQuestion();
+        });
+
+        document.getElementById('tab-answer').addEventListener('click', function() {
+            switchToAnswer();
+        });
+
         document.getElementById('load-all').addEventListener('click', function() {
             loadAllContent(problemId);
         });
@@ -501,6 +570,25 @@
         document.getElementById('save-all').addEventListener('click', function() {
             saveAllContent(problemId);
         });
+
+        // 标签切换函数
+        function switchToQuestion() {
+            document.getElementById('question-area').style.display = 'flex';
+            document.getElementById('answer-area').style.display = 'none';
+            document.getElementById('tab-question').style.background = '#1890ff';
+            document.getElementById('tab-question').style.color = 'white';
+            document.getElementById('tab-answer').style.background = '#f0f0f0';
+            document.getElementById('tab-answer').style.color = '#666';
+        }
+
+        function switchToAnswer() {
+            document.getElementById('question-area').style.display = 'none';
+            document.getElementById('answer-area').style.display = 'flex';
+            document.getElementById('tab-question').style.background = '#f0f0f0';
+            document.getElementById('tab-question').style.color = '#666';
+            document.getElementById('tab-answer').style.background = '#1890ff';
+            document.getElementById('tab-answer').style.color = 'white';
+        }
     }
 
     // 加载全部内容
@@ -633,14 +721,23 @@
     // 更新预览
     function updatePreviews() {
         const questionText = document.getElementById('question-editor').value;
+        const questionSupplementText = document.getElementById('question-supplement').value;
         const answerText = document.getElementById('answer-editor').value;
 
-        // 更新题目预览
+        // 更新题目内容预览
         if (questionText) {
             renderWithKaTeX(document.getElementById('question-preview'), questionText);
         } else {
             document.getElementById('question-preview').innerHTML =
-                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题目预览将在这里显示...</div>';
+                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题目内容预览将在这里显示...</div>';
+        }
+
+        // 更新题目补充预览
+        if (questionSupplementText) {
+            renderWithKaTeX(document.getElementById('question-supplement-preview'), questionSupplementText);
+        } else {
+            document.getElementById('question-supplement-preview').innerHTML =
+                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题目补充预览将在这里显示...</div>';
         }
 
         // 更新答案预览
