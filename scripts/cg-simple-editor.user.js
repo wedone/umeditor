@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.3.7
+// @version      1.3.10
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -300,7 +300,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
                         <h3 style="margin: 0; color: #1890ff;"><i class="fas fa-edit" style="margin-right: 8px;"></i>橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.7</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.10</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -569,17 +569,21 @@
         
         let previewTimeout;
         function setupPreviewUpdates() {
+            // 为所有编辑器添加输入事件监听（用于预览更新）
             [questionEditor, questionSupplement, answerEditor, answerSupplement].forEach(editor => {
                 editor.addEventListener('input', function() {
                     clearTimeout(previewTimeout);
                     previewTimeout = setTimeout(updatePreviews, 300);
                 });
-                
+            });
+            
+            // 只为右侧编辑器（题干补充和答案补充）添加焦点事件监听
+            [questionSupplement, answerSupplement].forEach(editor => {
                 editor.addEventListener('focus', function() {
                     this.style.borderColor = '#1890ff';
                     this.style.boxShadow = '0 0 0 2px rgba(24, 144, 255, 0.2)';
                     
-                    // 动态调整宽度
+                    // 动态调整宽度 - 右侧获得焦点
                     adjustColumnWidths(this.id, true);
                 });
                 
@@ -587,7 +591,7 @@
                     this.style.borderColor = '#d9d9d9';
                     this.style.boxShadow = 'none';
                     
-                    // 恢复等宽布局
+                    // 恢复默认宽度 - 右侧失去焦点
                     adjustColumnWidths(this.id, false);
                 });
             });
@@ -595,7 +599,10 @@
         
         setupPreviewUpdates();
         
-        // 动态调整列宽度的函数
+        // 初始化宽度比例为60:40
+        adjustColumnWidths('question-supplement', false);
+        
+        // 动态调整列宽度的函数 - 只处理右侧编辑器
         function adjustColumnWidths(editorId, isFocus) {
             const questionLeft = document.getElementById('question-left');
             const questionRight = document.getElementById('question-right');
@@ -606,30 +613,32 @@
             const answerPreviewLeft = document.getElementById('answer-preview-left');
             const answerPreviewRight = document.getElementById('answer-preview-right');
             
-            // 设置宽度比例
-            const focusedWidth = isFocus ? 1.5 : 1;  // 60% vs 40% = 1.5:1
-            const unfocusedWidth = 1;
+            // 设置宽度比例：左侧默认60%，右侧默认40%
+            const leftWidth = isFocus ? 1 : 1.5;    // 左侧：焦点在右侧时为40%，否则60%
+            const rightWidth = isFocus ? 1.5 : 1;   // 右侧：焦点在右侧时为60%，否则40%
             
-            if (editorId === 'question-editor') {
-                questionLeft.style.flex = focusedWidth;
-                questionRight.style.flex = unfocusedWidth;
-                questionPreviewLeft.style.flex = focusedWidth;
-                questionPreviewRight.style.flex = unfocusedWidth;
-            } else if (editorId === 'question-supplement') {
-                questionLeft.style.flex = unfocusedWidth;
-                questionRight.style.flex = focusedWidth;
-                questionPreviewLeft.style.flex = unfocusedWidth;
-                questionPreviewRight.style.flex = focusedWidth;
-            } else if (editorId === 'answer-editor') {
-                answerLeft.style.flex = focusedWidth;
-                answerRight.style.flex = unfocusedWidth;
-                answerPreviewLeft.style.flex = focusedWidth;
-                answerPreviewRight.style.flex = unfocusedWidth;
+            if (editorId === 'question-supplement') {
+                // 题干补充编辑器
+                questionLeft.style.flex = leftWidth;
+                questionRight.style.flex = rightWidth;
+                questionPreviewLeft.style.flex = leftWidth;
+                questionPreviewRight.style.flex = rightWidth;
             } else if (editorId === 'answer-supplement') {
-                answerLeft.style.flex = unfocusedWidth;
-                answerRight.style.flex = focusedWidth;
-                answerPreviewLeft.style.flex = unfocusedWidth;
-                answerPreviewRight.style.flex = focusedWidth;
+                // 答案补充编辑器
+                answerLeft.style.flex = leftWidth;
+                answerRight.style.flex = rightWidth;
+                answerPreviewLeft.style.flex = leftWidth;
+                answerPreviewRight.style.flex = rightWidth;
+            } else {
+                // 其他情况恢复默认（左侧60%，右侧40%）
+                questionLeft.style.flex = 1.5;
+                questionRight.style.flex = 1;
+                questionPreviewLeft.style.flex = 1.5;
+                questionPreviewRight.style.flex = 1;
+                answerLeft.style.flex = 1.5;
+                answerRight.style.flex = 1;
+                answerPreviewLeft.style.flex = 1.5;
+                answerPreviewRight.style.flex = 1;
             }
         }
 
@@ -658,6 +667,9 @@
             document.getElementById('tab-question').style.color = 'white';
             document.getElementById('tab-answer').style.background = '#f0f0f0';
             document.getElementById('tab-answer').style.color = '#666';
+            
+            // 确保题干版面使用正确的60:40宽度比例
+            adjustColumnWidths('question-supplement', false);
         }
 
         function switchToAnswer() {
@@ -667,10 +679,13 @@
             document.getElementById('tab-question').style.color = '#666';
             document.getElementById('tab-answer').style.background = '#1890ff';
             document.getElementById('tab-answer').style.color = 'white';
+            
+            // 确保答案版面使用正确的60:40宽度比例
+            adjustColumnWidths('answer-supplement', false);
         }
     }
 
-    // 加载当前标签内容
+    // 加载全部内容
     function loadCurrentContent(problemId) {
         const loadBtn = document.getElementById('load-current');
         const originalText = loadBtn.innerHTML;
@@ -698,16 +713,10 @@
                 console.log('过滤后题干内容:', questionContent);
                 console.log('过滤后答案内容:', answerContent);
 
-                // 根据当前激活的标签决定加载哪个内容
-                const isQuestionTabActive = document.getElementById('question-area').style.display !== 'none';
-                
-                if (isQuestionTabActive) {
-                    document.getElementById('question-editor').value = questionContent;
-                    showMessage('已成功加载题干内容');
-                } else {
-                    document.getElementById('answer-editor').value = answerContent;
-                    showMessage('已成功加载答案内容');
-                }
+                // 直接加载全部内容
+                document.getElementById('question-editor').value = questionContent;
+                document.getElementById('answer-editor').value = answerContent;
+                showMessage('已成功加载全部内容');
                 
                 // 更新预览
                 updatePreviews();
