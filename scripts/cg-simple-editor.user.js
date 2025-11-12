@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.3.4
+// @version      1.3.5
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -280,7 +280,7 @@
                 left: 50%;
                 transform: translate(-50%, -50%);
                 width: 80%;
-                height: 80%;
+                height: 95%;
                 background: white;
                 border: 2px solid #1890ff;
                 border-radius: 8px;
@@ -288,12 +288,12 @@
                 z-index: 10000;
                 display: flex;
                 flex-direction: column;
-                padding: 20px;
+                padding: 15px;
             ">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
                         <h3 style="margin: 0; color: #1890ff;">橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.4</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.5</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -307,50 +307,50 @@
                 </div>
                 
                 <!-- 切换标签和操作按钮 -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #e8e8e8; padding-bottom: 8px;">
                     <div style="display: flex; align-items: center;">
                         <button id="tab-question" style="
-                            padding: 8px 16px;
+                            padding: 6px 12px;
                             background: #1890ff;
                             color: white;
                             border: none;
                             border-radius: 4px 4px 0 0;
                             cursor: pointer;
-                            font-size: 14px;
+                            font-size: 13px;
                             margin-right: 5px;
                         ">📝 题干</button>
                         <button id="tab-answer" style="
-                            padding: 8px 16px;
+                            padding: 6px 12px;
                             background: #f0f0f0;
                             color: #666;
                             border: none;
                             border-radius: 4px 4px 0 0;
                             cursor: pointer;
-                            font-size: 14px;
+                            font-size: 13px;
                             margin-right: 15px;
                         ">📄 答案</button>
-                        <div style="display: flex; gap: 10px;">
+                        <div style="display: flex; gap: 8px;">
                             <button id="load-current" style="
-                                padding: 8px 16px;
+                                padding: 6px 12px;
                                 background: #52c41a;
                                 color: white;
                                 border: none;
-                                border-radius: 4px;
+                                border-radius: 3px;
                                 cursor: pointer;
-                                font-size: 14px;
+                                font-size: 13px;
                             ">加载</button>
                             <button id="save-all" style="
-                                padding: 8px 16px;
+                                padding: 6px 12px;
                                 background: #1890ff;
                                 color: white;
                                 border: none;
-                                border-radius: 4px;
+                                border-radius: 3px;
                                 cursor: pointer;
-                                font-size: 14px;
+                                font-size: 13px;
                             ">保存</button>
                         </div>
                     </div>
-                    <div style="font-size: 12px; color: #666;">
+                    <div style="font-size: 11px; color: #666;">
                         错题ID: <strong>${problemId}</strong>
                     </div>
                 </div>
@@ -408,7 +408,7 @@
                                         border-radius: 6px;
                                         padding: 12px;
                                         background: #fafafa;
-                                        height: 200px;
+                                        height: 250px;
                                         overflow-y: auto;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
@@ -425,7 +425,7 @@
                                         border-radius: 6px;
                                         padding: 12px;
                                         background: #fafafa;
-                                        height: 200px;
+                                        height: 250px;
                                         overflow-y: auto;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
@@ -489,7 +489,7 @@
                                         border-radius: 6px;
                                         padding: 12px;
                                         background: #fafafa;
-                                        height: 200px;
+                                        height: 250px;
                                         overflow-y: auto;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
@@ -506,7 +506,7 @@
                                         border-radius: 6px;
                                         padding: 12px;
                                         background: #fafafa;
-                                        height: 200px;
+                                        height: 250px;
                                         overflow-y: auto;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
@@ -640,10 +640,10 @@
                 
                 if (isQuestionTabActive) {
                     document.getElementById('question-editor').value = questionContent;
-                    showMessage('✅ 已成功加载题干内容');
+                    showMessage('已成功加载题干内容');
                 } else {
                     document.getElementById('answer-editor').value = answerContent;
-                    showMessage('✅ 已成功加载答案内容');
+                    showMessage('已成功加载答案内容');
                 }
                 
                 // 更新预览
@@ -716,7 +716,7 @@
 
         saveEditedText(problemId, questionText, answerText, function(result) {
             if (result.success) {
-                showMessage('✅ 内容保存成功！页面即将刷新...');
+                showMessage('保存成功！即将刷新...');
                 
                 // 2秒后自动刷新页面
                 setTimeout(() => {
