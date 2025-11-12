@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         橙果错题本简单编辑器
+// @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.3.3
-// @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
-// @author       You
+// @version      1.3.4
+// @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
+// @author       WeDone
 // @match        https://ctb.91chengguo.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
@@ -292,8 +292,8 @@
             ">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
-                        <h3 style="margin: 0; color: #1890ff;">橙果错题本编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.3</span>
+                        <h3 style="margin: 0; color: #1890ff;">橙果错题编辑器</h3>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.4</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -307,46 +307,51 @@
                 </div>
                 
                 <!-- 切换标签和操作按钮 -->
-                <div style="display: flex; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
-                    <button id="tab-question" style="
-                        padding: 8px 16px;
-                        background: #1890ff;
-                        color: white;
-                        border: none;
-                        border-radius: 4px 4px 0 0;
-                        cursor: pointer;
-                        font-size: 14px;
-                        margin-right: 5px;
-                    ">📝 题干</button>
-                    <button id="tab-answer" style="
-                        padding: 8px 16px;
-                        background: #f0f0f0;
-                        color: #666;
-                        border: none;
-                        border-radius: 4px 4px 0 0;
-                        cursor: pointer;
-                        font-size: 14px;
-                        margin-right: 15px;
-                    ">📄 答案</button>
-                    <div style="display: flex; gap: 10px;">
-                        <button id="load-current" style="
-                            padding: 8px 16px;
-                            background: #52c41a;
-                            color: white;
-                            border: none;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-size: 14px;
-                        ">加载</button>
-                        <button id="save-all" style="
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
+                    <div style="display: flex; align-items: center;">
+                        <button id="tab-question" style="
                             padding: 8px 16px;
                             background: #1890ff;
                             color: white;
                             border: none;
-                            border-radius: 4px;
+                            border-radius: 4px 4px 0 0;
                             cursor: pointer;
                             font-size: 14px;
-                        ">保存</button>
+                            margin-right: 5px;
+                        ">📝 题干</button>
+                        <button id="tab-answer" style="
+                            padding: 8px 16px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: none;
+                            border-radius: 4px 4px 0 0;
+                            cursor: pointer;
+                            font-size: 14px;
+                            margin-right: 15px;
+                        ">📄 答案</button>
+                        <div style="display: flex; gap: 10px;">
+                            <button id="load-current" style="
+                                padding: 8px 16px;
+                                background: #52c41a;
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 14px;
+                            ">加载</button>
+                            <button id="save-all" style="
+                                padding: 8px 16px;
+                                background: #1890ff;
+                                color: white;
+                                border: none;
+                                border-radius: 4px;
+                                cursor: pointer;
+                                font-size: 14px;
+                            ">保存</button>
+                        </div>
+                    </div>
+                    <div style="font-size: 12px; color: #666;">
+                        错题ID: <strong>${problemId}</strong>
                     </div>
                 </div>
                 
@@ -434,48 +439,86 @@
                     
                     <!-- 答案编辑区域 -->
                     <div id="answer-area" style="display: none; flex-direction: column; height: 100%; overflow: hidden;">
-                        <div style="margin-bottom: 10px;">
-                            <label style="font-weight: 600; color: #262626;">答案内容:</label>
+
+                        <!-- 答案编辑双栏 -->
+                        <div style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
+                            <!-- 左侧答案内容输入框 -->
+                            <div style="flex: 1; display: flex; flex-direction: column;">
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">答案内容:</label>
+                                <textarea id="answer-editor" style="
+                                    flex: 1;
+                                    width: 100%;
+                                    padding: 12px;
+                                    border: 1px solid #d9d9d9;
+                                    border-radius: 6px;
+                                    resize: none;
+                                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                    font-size: 13px;
+                                    line-height: 1.5;
+                                    overflow-y: auto;
+                                " placeholder="输入答案内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
+                            </div>
+                            
+                            <!-- 右侧新增输入框 -->
+                            <div style="flex: 1; display: flex; flex-direction: column;">
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">答案补充:</label>
+                                <textarea id="answer-supplement" style="
+                                    flex: 1;
+                                    width: 100%;
+                                    padding: 12px;
+                                    border: 1px solid #d9d9d9;
+                                    border-radius: 6px;
+                                    resize: none;
+                                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                    font-size: 13px;
+                                    line-height: 1.5;
+                                    overflow-y: auto;
+                                " placeholder="输入答案补充内容"></textarea>
+                            </div>
                         </div>
-                        <textarea id="answer-editor" style="
-                            flex: 1;
-                            width: 100%;
-                            padding: 12px;
-                            border: 1px solid #d9d9d9;
-                            border-radius: 6px;
-                            resize: none;
-                            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                            font-size: 13px;
-                            line-height: 1.5;
-                            overflow-y: auto;
-                        " placeholder="输入答案内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                         
-                        <!-- 答案预览 -->
+                        <!-- 答案预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
-                            <label style="font-weight: 600; color: #262626; font-size: 14px; margin-bottom: 8px; display: block;">
-                                答案预览:
-                            </label>
-                            <div id="answer-preview" style="
-                                border: 1px solid #e8e8e8;
-                                border-radius: 6px;
-                                padding: 12px;
-                                background: #fafafa;
-                                height: 200px;
-                                overflow-y: auto;
-                            ">
-                                <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                    答案预览将在这里显示...
+
+                            <div style="display: flex; gap: 15px;">
+                                <!-- 左侧答案内容预览 -->
+                                <div style="flex: 1;">
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">答案预览:</label>
+                                    <div id="answer-preview" style="
+                                        border: 1px solid #e8e8e8;
+                                        border-radius: 6px;
+                                        padding: 12px;
+                                        background: #fafafa;
+                                        height: 200px;
+                                        overflow-y: auto;
+                                    ">
+                                        <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
+                                            答案预览将在这里显示...
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 右侧答案补充预览 -->
+                                <div style="flex: 1;">
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">答案补充预览:</label>
+                                    <div id="answer-supplement-preview" style="
+                                        border: 1px solid #e8e8e8;
+                                        border-radius: 6px;
+                                        padding: 12px;
+                                        background: #fafafa;
+                                        height: 200px;
+                                        overflow-y: auto;
+                                    ">
+                                        <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
+                                            答案补充预览将在这里显示...
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
                 
-                <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-                    <div style="font-size: 12px; color: #666;">
-                    错题ID: <strong>${problemId}</strong>
-                    </div>
-                </div>
             </div>
         `;
 
@@ -503,10 +546,11 @@
         const questionEditor = document.getElementById('question-editor');
         const questionSupplement = document.getElementById('question-supplement');
         const answerEditor = document.getElementById('answer-editor');
+        const answerSupplement = document.getElementById('answer-supplement');
         
         let previewTimeout;
         function setupPreviewUpdates() {
-            [questionEditor, questionSupplement, answerEditor].forEach(editor => {
+            [questionEditor, questionSupplement, answerEditor, answerSupplement].forEach(editor => {
                 editor.addEventListener('input', function() {
                     clearTimeout(previewTimeout);
                     previewTimeout = setTimeout(updatePreviews, 300);
@@ -620,6 +664,7 @@
         const questionText = document.getElementById('question-editor').value;
         const questionSupplementText = document.getElementById('question-supplement').value;
         const answerText = document.getElementById('answer-editor').value;
+        const answerSupplementText = document.getElementById('answer-supplement').value;
 
         // 更新题干内容预览
         if (questionText) {
@@ -637,12 +682,20 @@
                 '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题干补充预览将在这里显示...</div>';
         }
 
-        // 更新答案预览
+        // 更新答案内容预览
         if (answerText) {
             renderWithKaTeX(document.getElementById('answer-preview'), answerText);
         } else {
             document.getElementById('answer-preview').innerHTML =
                 '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">答案预览将在这里显示...</div>';
+        }
+
+        // 更新答案补充预览
+        if (answerSupplementText) {
+            renderWithKaTeX(document.getElementById('answer-supplement-preview'), answerSupplementText);
+        } else {
+            document.getElementById('answer-supplement-preview').innerHTML =
+                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">答案补充预览将在这里显示...</div>';
         }
     }
 
