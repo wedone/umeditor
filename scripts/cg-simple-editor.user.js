@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         橙果错题本简单编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.3.1
-// @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题目和答案，支持双栏编辑
+// @version      1.3.3
+// @description  橙果错题本简单编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       You
 // @match        https://ctb.91chengguo.com/*
 // @grant        GM_xmlhttpRequest
@@ -139,7 +139,7 @@
         return null;
     }
 
-    // 从当前URL获取题目ID
+    // 从当前URL获取错题ID
     function getProblemIdFromUrl() {
         const url = window.location.href;
         const match = url.match(/edit\/(\d+)/);
@@ -195,7 +195,7 @@
         });
     }
 
-    // 获取题目详情
+    // 获取错题详情
     function getProblemDetail(problemId, callback) {
         callPCApi('com.orange.note.query.problem.detail', { problemId }, callback);
     }
@@ -255,7 +255,7 @@
         const problemId = getProblemIdFromUrl();
         
         if (!problemId) {
-            showMessage('未找到题目ID，请确保在编辑页面使用', false);
+            showMessage('未找到错题ID，请确保在编辑页面使用', false);
             return;
         }
 
@@ -291,7 +291,10 @@
                 padding: 20px;
             ">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
-                    <h3 style="margin: 0; color: #1890ff;">橙果错题本编辑器</h3>
+                    <div style="display: flex; align-items: center;">
+                        <h3 style="margin: 0; color: #1890ff;">橙果错题本编辑器</h3>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.3</span>
+                    </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
                         color: white;
@@ -303,8 +306,8 @@
                     ">关闭</button>
                 </div>
                 
-                <!-- 切换标签 -->
-                <div style="display: flex; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8;">
+                <!-- 切换标签和操作按钮 -->
+                <div style="display: flex; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <button id="tab-question" style="
                         padding: 8px 16px;
                         background: #1890ff;
@@ -314,7 +317,7 @@
                         cursor: pointer;
                         font-size: 14px;
                         margin-right: 5px;
-                    ">📝 题目</button>
+                    ">📝 题干</button>
                     <button id="tab-answer" style="
                         padding: 8px 16px;
                         background: #f0f0f0;
@@ -323,30 +326,39 @@
                         border-radius: 4px 4px 0 0;
                         cursor: pointer;
                         font-size: 14px;
+                        margin-right: 15px;
                     ">📄 答案</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="load-current" style="
+                            padding: 8px 16px;
+                            background: #52c41a;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">加载</button>
+                        <button id="save-all" style="
+                            padding: 8px 16px;
+                            background: #1890ff;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">保存</button>
+                    </div>
                 </div>
                 
                 <div style="flex: 1; overflow: hidden;">
-                    <!-- 题目编辑区域 -->
+                    <!-- 题干编辑区域 -->
                     <div id="question-area" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                            <label style="font-weight: 600; color: #262626;">题目内容:</label>
-                            <button id="load-question" style="
-                                padding: 4px 8px;
-                                background: #52c41a;
-                                color: white;
-                                border: none;
-                                border-radius: 3px;
-                                cursor: pointer;
-                                font-size: 11px;
-                            ">📥 加载题目</button>
-                        </div>
-                        
-                        <!-- 题目编辑双栏 -->
+
+                        <!-- 题干编辑双栏 -->
                         <div style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
-                            <!-- 左侧题目内容输入框 -->
+                            <!-- 左侧题干内容输入框 -->
                             <div style="flex: 1; display: flex; flex-direction: column;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">题目内容:</label>
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">题干内容:</label>
                                 <textarea id="question-editor" style="
                                     flex: 1;
                                     width: 100%;
@@ -358,12 +370,12 @@
                                     font-size: 13px;
                                     line-height: 1.5;
                                     overflow-y: auto;
-                                " placeholder="输入题目内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
+                                " placeholder="输入题干内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                             </div>
                             
                             <!-- 右侧新增输入框 -->
                             <div style="flex: 1; display: flex; flex-direction: column;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">题目补充:</label>
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">题干补充:</label>
                                 <textarea id="question-supplement" style="
                                     flex: 1;
                                     width: 100%;
@@ -375,19 +387,17 @@
                                     font-size: 13px;
                                     line-height: 1.5;
                                     overflow-y: auto;
-                                " placeholder="输入题目补充内容"></textarea>
+                                " placeholder="输入题干补充内容"></textarea>
                             </div>
                         </div>
                         
-                        <!-- 题目预览双栏 -->
+                        <!-- 题干预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
-                            <label style="font-weight: 600; color: #262626; font-size: 14px; margin-bottom: 8px; display: block;">
-                                题目预览:
-                            </label>
+
                             <div style="display: flex; gap: 15px;">
-                                <!-- 左侧题目内容预览 -->
+                                <!-- 左侧题干内容预览 -->
                                 <div style="flex: 1;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">题目内容预览:</label>
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">题干预览:</label>
                                     <div id="question-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -397,14 +407,14 @@
                                         overflow-y: auto;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                            题目内容预览将在这里显示...
+                                            题干预览将在这里显示...
                                         </div>
                                     </div>
                                 </div>
                                 
-                                <!-- 右侧题目补充预览 -->
+                                <!-- 右侧题干补充预览 -->
                                 <div style="flex: 1;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">题目补充预览:</label>
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">题干补充预览:</label>
                                     <div id="question-supplement-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -414,7 +424,7 @@
                                         overflow-y: auto;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                            题目补充预览将在这里显示...
+                                            题干补充预览将在这里显示...
                                         </div>
                                     </div>
                                 </div>
@@ -424,17 +434,8 @@
                     
                     <!-- 答案编辑区域 -->
                     <div id="answer-area" style="display: none; flex-direction: column; height: 100%; overflow: hidden;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="margin-bottom: 10px;">
                             <label style="font-weight: 600; color: #262626;">答案内容:</label>
-                            <button id="load-answer" style="
-                                padding: 4px 8px;
-                                background: #52c41a;
-                                color: white;
-                                border: none;
-                                border-radius: 3px;
-                                cursor: pointer;
-                                font-size: 11px;
-                            ">📥 加载答案</button>
                         </div>
                         <textarea id="answer-editor" style="
                             flex: 1;
@@ -472,28 +473,7 @@
                 
                 <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
                     <div style="font-size: 12px; color: #666;">
-                        题目ID: <strong>${problemId}</strong>
-                    </div>
-                    <div>
-                        <button id="save-all" style="
-                            padding: 8px 16px;
-                            background: #1890ff;
-                            color: white;
-                            border: none;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-size: 14px;
-                            margin-right: 10px;
-                        ">💾 保存全部</button>
-                        <button id="load-all" style="
-                            padding: 8px 16px;
-                            background: #52c41a;
-                            color: white;
-                            border: none;
-                            border-radius: 4px;
-                            cursor: pointer;
-                            font-size: 14px;
-                        ">📥 加载全部</button>
+                    错题ID: <strong>${problemId}</strong>
                     </div>
                 </div>
             </div>
@@ -555,16 +535,8 @@
             switchToAnswer();
         });
 
-        document.getElementById('load-all').addEventListener('click', function() {
-            loadAllContent(problemId);
-        });
-
-        document.getElementById('load-question').addEventListener('click', function() {
-            loadQuestionContent(problemId);
-        });
-
-        document.getElementById('load-answer').addEventListener('click', function() {
-            loadAnswerContent(problemId);
+        document.getElementById('load-current').addEventListener('click', function() {
+            loadCurrentContent(problemId);
         });
 
         document.getElementById('save-all').addEventListener('click', function() {
@@ -591,9 +563,9 @@
         }
     }
 
-    // 加载全部内容
-    function loadAllContent(problemId) {
-        const loadBtn = document.getElementById('load-all');
+    // 加载当前标签内容
+    function loadCurrentContent(problemId) {
+        const loadBtn = document.getElementById('load-current');
         const originalText = loadBtn.innerHTML;
         loadBtn.innerHTML = '⏳ 加载中...';
         loadBtn.disabled = true;
@@ -603,37 +575,37 @@
                 let questionContent = result.content.question || '';
                 let answerContent = result.content.answer || '';
 
-                console.log('原始题目内容:', questionContent);
+                console.log('原始题干内容:', questionContent);
                 console.log('原始答案内容:', answerContent);
 
                 // 调试：检查是否包含换行符和图片
-                console.log('题目内容包含换行符:', questionContent.includes('\n'));
+                console.log('题干内容包含换行符:', questionContent.includes('\n'));
                 console.log('答案内容包含换行符:', answerContent.includes('\n'));
-                console.log('题目内容包含图片:', /<img[^>]*>/i.test(questionContent));
+                console.log('题干内容包含图片:', /<img[^>]*>/i.test(questionContent));
                 console.log('答案内容包含图片:', /<img[^>]*>/i.test(answerContent));
 
-                // 替换实际的换行符及其周围的空格，但保留HTML标签
-                const beforeQuestion = questionContent;
-                const beforeAnswer = answerContent;
-                
-                // 使用更精确的方法：先保护HTML标签，然后处理换行符，最后恢复标签
+                // 使用保护HTML标签并过滤换行符的函数
                 questionContent = protectHtmlTagsAndFilterNewlines(questionContent);
                 answerContent = protectHtmlTagsAndFilterNewlines(answerContent);
 
-                console.log('过滤后题目内容:', questionContent);
+                console.log('过滤后题干内容:', questionContent);
                 console.log('过滤后答案内容:', answerContent);
-                console.log('题目内容变化:', beforeQuestion !== questionContent);
-                console.log('答案内容变化:', beforeAnswer !== answerContent);
 
-                document.getElementById('question-editor').value = questionContent;
-                document.getElementById('answer-editor').value = answerContent;
+                // 根据当前激活的标签决定加载哪个内容
+                const isQuestionTabActive = document.getElementById('question-area').style.display !== 'none';
+                
+                if (isQuestionTabActive) {
+                    document.getElementById('question-editor').value = questionContent;
+                    showMessage('✅ 已成功加载题干内容');
+                } else {
+                    document.getElementById('answer-editor').value = answerContent;
+                    showMessage('✅ 已成功加载答案内容');
+                }
                 
                 // 更新预览
                 updatePreviews();
-
-                showMessage('✅ 已成功加载题目和答案内容');
             } else {
-                showMessage('❌ 加载题目内容失败: ' + (result.errMsg || '未知错误'), false);
+                showMessage('❌ 加载内容失败: ' + (result.errMsg || '未知错误'), false);
             }
 
             // 恢复按钮状态
@@ -642,81 +614,6 @@
         });
     }
 
-    // 仅加载题目内容
-    function loadQuestionContent(problemId) {
-        const loadBtn = document.getElementById('load-question');
-        const originalText = loadBtn.innerHTML;
-        loadBtn.innerHTML = '⏳ 加载中...';
-        loadBtn.disabled = true;
-
-        getProblemDetail(problemId, function(result) {
-            if (result.success && result.content) {
-                let questionContent = result.content.question || '';
-
-                console.log('加载题目 - 原始内容:', questionContent);
-                console.log('加载题目 - 包含换行符:', questionContent.includes('\n'));
-                console.log('加载题目 - 包含图片:', /<img[^>]*>/i.test(questionContent));
-
-                // 使用保护HTML标签并过滤换行符的函数
-                const beforeReplace = questionContent;
-                questionContent = protectHtmlTagsAndFilterNewlines(questionContent);
-                
-                console.log('加载题目 - 过滤后:', questionContent);
-                console.log('加载题目 - 过滤是否生效:', beforeReplace !== questionContent);
-
-                document.getElementById('question-editor').value = questionContent;
-                
-                // 更新预览
-                updatePreviews();
-
-                showMessage('✅ 已成功加载题目内容');
-            } else {
-                showMessage('❌ 加载题目内容失败: ' + (result.errMsg || '未知错误'), false);
-            }
-
-            // 恢复按钮状态
-            loadBtn.innerHTML = originalText;
-            loadBtn.disabled = false;
-        });
-    }
-
-    // 仅加载答案内容
-    function loadAnswerContent(problemId) {
-        const loadBtn = document.getElementById('load-answer');
-        const originalText = loadBtn.innerHTML;
-        loadBtn.innerHTML = '⏳ 加载中...';
-        loadBtn.disabled = true;
-
-        getProblemDetail(problemId, function(result) {
-            if (result.success && result.content) {
-                let answerContent = result.content.answer || '';
-
-                console.log('加载答案 - 原始内容:', answerContent);
-                console.log('加载答案 - 包含换行符:', answerContent.includes('\n'));
-                console.log('加载答案 - 包含图片:', /<img[^>]*>/i.test(answerContent));
-
-                // 使用保护HTML标签并过滤换行符的函数
-                const beforeReplace = answerContent;
-                answerContent = protectHtmlTagsAndFilterNewlines(answerContent);
-                
-                console.log('加载答案 - 过滤后:', answerContent);
-                console.log('加载答案 - 过滤是否生效:', beforeReplace !== answerContent);
-
-                document.getElementById('answer-editor').value = answerContent;
-                
-                // 更新预览
-                updatePreviews();
-
-                showMessage('✅ 已成功加载答案内容');
-            } else {
-                showMessage('❌ 加载答案内容失败: ' + (result.errMsg || '未知错误'), false);
-            }
-
-            // 恢复按钮状态
-            loadBtn.innerHTML = originalText;
-            loadBtn.disabled = false;
-        });
-    }
 
     // 更新预览
     function updatePreviews() {
@@ -724,20 +621,20 @@
         const questionSupplementText = document.getElementById('question-supplement').value;
         const answerText = document.getElementById('answer-editor').value;
 
-        // 更新题目内容预览
+        // 更新题干内容预览
         if (questionText) {
             renderWithKaTeX(document.getElementById('question-preview'), questionText);
         } else {
             document.getElementById('question-preview').innerHTML =
-                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题目内容预览将在这里显示...</div>';
+                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题干内容预览将在这里显示...</div>';
         }
 
-        // 更新题目补充预览
+        // 更新题干补充预览
         if (questionSupplementText) {
             renderWithKaTeX(document.getElementById('question-supplement-preview'), questionSupplementText);
         } else {
             document.getElementById('question-supplement-preview').innerHTML =
-                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题目补充预览将在这里显示...</div>';
+                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题干补充预览将在这里显示...</div>';
         }
 
         // 更新答案预览
@@ -755,7 +652,7 @@
         const answerText = document.getElementById('answer-editor').value;
 
         if (!questionText && !answerText) {
-            showMessage('❌ 请输入要保存的题目内容或答案', false);
+            showMessage('❌ 请输入要保存的题干内容或答案', false);
             return;
         }
 
