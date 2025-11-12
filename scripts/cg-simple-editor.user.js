@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.3.12
+// @version      1.3.13
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -31,6 +31,55 @@
         // 加载Font Awesome CSS
         const faCSS = GM_getResourceText('faCSS');
         GM_addStyle(faCSS);
+    }
+
+    // 创建共享的右侧源码编辑器组件
+    function createSourceEditor(type, placeholder = "输入源码") {
+        return `
+            <div id="${type}-right" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
+                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">
+                    <i class="fas fa-plus-circle" style="margin-right: 4px;"></i>源码编辑
+                </label>
+                <textarea id="${type}-supplement" style="
+                    flex: 1;
+                    width: 100%;
+                    padding: 12px;
+                    border: 1px solid #d9d9d9;
+                    border-radius: 6px;
+                    resize: none;
+                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                    font-size: 13px;
+                    line-height: 1.5;
+                    overflow-y: auto;
+                    transition: all 0.3s ease;
+                " placeholder="${placeholder}"></textarea>
+            </div>
+        `;
+    }
+
+    // 创建共享的右侧源码预览组件
+    function createSourcePreview(type, label = "源码预览") {
+        return `
+            <div id="${type}-preview-right" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
+                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">
+                    <i class="fas fa-eye" style="margin-right: 4px;"></i>${label}
+                </label>
+                <div id="${type}-supplement-preview" style="
+                    border: 1px solid #e8e8e8;
+                    border-radius: 6px;
+                    padding: 12px;
+                    background: #fafafa;
+                    height: 250px;
+                    overflow-y: auto;
+                    transition: all 0.3s ease;
+                ">
+                    <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
+                        <i class="fas fa-plus-circle" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
+                        ${label}将在这里显示...
+                    </div>
+                </div>
+            </div>
+        `;
     }
 
     // 使用KaTeX渲染内容，支持图片预览
@@ -294,7 +343,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
                         <h3 style="margin: 0; color: #1890ff;"><i class="fas fa-edit" style="margin-right: 8px;"></i>橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.12</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.13</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -362,9 +411,9 @@
 
                         <!-- 题干编辑双栏 -->
                         <div id="question-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
-                            <!-- 左侧题干内容输入框 -->
+                            <!-- 左侧题干橙果码输入框 -->
                             <div id="question-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-pen" style="margin-right: 4px;"></i>题干内容:</label>
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-pen" style="margin-right: 4px;"></i>题干橙果码:</label>
                                 <textarea id="question-editor" style="
                                     flex: 1;
                                     width: 100%;
@@ -377,33 +426,18 @@
                                     line-height: 1.5;
                                     overflow-y: auto;
                                     transition: all 0.3s ease;
-                                " placeholder="输入题干内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
+                                " placeholder="输入题干橙果码，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                             </div>
                             
-                            <!-- 右侧新增输入框 -->
-                            <div id="question-right" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-plus-circle" style="margin-right: 4px;"></i>题干补充:</label>
-                                <textarea id="question-supplement" style="
-                                    flex: 1;
-                                    width: 100%;
-                                    padding: 12px;
-                                    border: 1px solid #d9d9d9;
-                                    border-radius: 6px;
-                                    resize: none;
-                                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                                    font-size: 13px;
-                                    line-height: 1.5;
-                                    overflow-y: auto;
-                                    transition: all 0.3s ease;
-                                " placeholder="输入题干补充内容"></textarea>
-                            </div>
+                            <!-- 右侧源码编辑器 -->
+                            ${createSourceEditor('question', '输入源码')}
                         </div>
                         
                         <!-- 题干预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
 
                             <div id="question-preview-columns" style="display: flex; gap: 15px;">
-                                <!-- 左侧题干内容预览 -->
+                                <!-- 左侧题干预览 -->
                                 <div id="question-preview-left" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
                                     <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>题干预览:</label>
                                     <div id="question-preview" style="
@@ -422,24 +456,8 @@
                                     </div>
                                 </div>
                                 
-                                <!-- 右侧题干补充预览 -->
-                                <div id="question-preview-right" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>题干补充预览:</label>
-                                    <div id="question-supplement-preview" style="
-                                        border: 1px solid #e8e8e8;
-                                        border-radius: 6px;
-                                        padding: 12px;
-                                        background: #fafafa;
-                                        height: 250px;
-                                        overflow-y: auto;
-                                        transition: all 0.3s ease;
-                                    ">
-                                        <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                            <i class="fas fa-plus-circle" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
-                                            题干补充预览将在这里显示...
-                                        </div>
-                                    </div>
-                                </div>
+                                <!-- 右侧源码预览 -->
+                                ${createSourcePreview('question', '源码预览')}
                             </div>
                         </div>
                     </div>
@@ -449,9 +467,9 @@
 
                         <!-- 答案编辑双栏 -->
                         <div id="answer-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
-                            <!-- 左侧答案内容输入框 -->
+                            <!-- 左侧答案橙果码输入框 -->
                             <div id="answer-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-pen" style="margin-right: 4px;"></i>答案内容:</label>
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-pen" style="margin-right: 4px;"></i>答案橙果码:</label>
                                 <textarea id="answer-editor" style="
                                     flex: 1;
                                     width: 100%;
@@ -464,33 +482,18 @@
                                     line-height: 1.5;
                                     overflow-y: auto;
                                     transition: all 0.3s ease;
-                                " placeholder="输入答案内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
+                                " placeholder="输入答案橙果码，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                             </div>
                             
-                            <!-- 右侧新增输入框 -->
-                            <div id="answer-right" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-plus-circle" style="margin-right: 4px;"></i>答案补充:</label>
-                                <textarea id="answer-supplement" style="
-                                    flex: 1;
-                                    width: 100%;
-                                    padding: 12px;
-                                    border: 1px solid #d9d9d9;
-                                    border-radius: 6px;
-                                    resize: none;
-                                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                                    font-size: 13px;
-                                    line-height: 1.5;
-                                    overflow-y: auto;
-                                    transition: all 0.3s ease;
-                                " placeholder="输入答案补充内容"></textarea>
-                            </div>
+                            <!-- 右侧源码编辑器 -->
+                            ${createSourceEditor('answer', '输入源码')}
                         </div>
                         
                         <!-- 答案预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
 
                             <div id="answer-preview-columns" style="display: flex; gap: 15px;">
-                                <!-- 左侧答案内容预览 -->
+                                <!-- 左侧答案橙果码预览 -->
                                 <div id="answer-preview-left" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
                                     <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>答案预览:</label>
                                     <div id="answer-preview" style="
@@ -509,24 +512,8 @@
                                     </div>
                                 </div>
                                 
-                                <!-- 右侧答案补充预览 -->
-                                <div id="answer-preview-right" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>答案补充预览:</label>
-                                    <div id="answer-supplement-preview" style="
-                                        border: 1px solid #e8e8e8;
-                                        border-radius: 6px;
-                                        padding: 12px;
-                                        background: #fafafa;
-                                        height: 250px;
-                                        overflow-y: auto;
-                                        transition: all 0.3s ease;
-                                    ">
-                                        <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                            <i class="fas fa-plus-circle" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
-                                            答案补充预览将在这里显示...
-                                        </div>
-                                    </div>
-                                </div>
+                                <!-- 右侧源码预览 -->
+                                ${createSourcePreview('answer', '源码预览')}
                             </div>
                         </div>
                     </div>
