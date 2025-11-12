@@ -1,38 +1,36 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.3.10
+// @version      1.3.12
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
 // @grant        GM_xmlhttpRequest
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_addStyle
+// @grant        GM_getResourceText
 // @connect      www.91chengguo.com
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js
 // @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css
+// @resource     faCSS https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css
 // @require      https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // 动态加载KaTeX CSS和Font Awesome
-    function loadKatexCSS() {
-        if (document.querySelector('link[href*="katex"]')) return;
-
-        const link = document.createElement('link');
-        link.rel = 'stylesheet';
-        link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
-        document.head.appendChild(link);
+    // 使用脚本头加载方式加载CSS
+    function loadStyles() {
+        // 加载KaTeX CSS
+        const katexCSS = GM_getResourceText('katexCSS');
+        GM_addStyle(katexCSS);
         
         // 加载Font Awesome CSS
-        const faLink = document.createElement('link');
-        faLink.rel = 'stylesheet';
-        faLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
-        document.head.appendChild(faLink);
+        const faCSS = GM_getResourceText('faCSS');
+        GM_addStyle(faCSS);
     }
 
     // 使用KaTeX渲染内容，支持图片预览
@@ -217,44 +215,40 @@
         }, callback);
     }
 
-    // 显示消息
+    // 显示消息 - 统一在面板正中显示
     function showMessage(message, isSuccess = true) {
         const messageDiv = document.createElement('div');
         messageDiv.innerHTML = `
             <div style="
                 position: fixed;
-                top: 20px;
-                right: 20px;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
                 background: ${isSuccess ? '#f6ffed' : '#fff2f0'};
                 border: 1px solid ${isSuccess ? '#b7eb8f' : '#ffccc7'};
-                border-radius: 6px;
-                padding: 15px;
+                border-radius: 8px;
+                padding: 16px 24px;
                 z-index: 10001;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-                max-width: 400px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                max-width: 500px;
                 color: ${isSuccess ? '#52c41a' : '#ff4d4f'};
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+                white-space: nowrap;
             ">
-                <strong>${isSuccess ? '✅' : '❌'} ${message}</strong>
-                <button onclick="this.parentElement.parentElement.remove()" style="
-                    margin-left: 10px;
-                    padding: 2px 6px;
-                    background: transparent;
-                    color: #666;
-                    border: 1px solid #d9d9d9;
-                    border-radius: 3px;
-                    cursor: pointer;
-                    font-size: 11px;
-                ">关闭</button>
+                <span style="margin-right: 8px;">${isSuccess ? '✅' : '❌'}</span>
+                ${message}
             </div>
         `;
         document.body.appendChild(messageDiv);
         
-        // 3秒后自动消失
+        // 2秒后自动消失
         setTimeout(() => {
             if (messageDiv.parentElement) {
                 messageDiv.remove();
             }
-        }, 3000);
+        }, 2000);
     }
 
     // 创建编辑器界面
@@ -262,7 +256,7 @@
         const problemId = getProblemIdFromUrl();
         
         if (!problemId) {
-            showMessage('未找到错题ID，请确保在编辑页面使用', false);
+            showMessage('未找到错题ID', false);
             return;
         }
 
@@ -300,7 +294,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
                         <h3 style="margin: 0; color: #1890ff;"><i class="fas fa-edit" style="margin-right: 8px;"></i>橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.10</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.12</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -716,12 +710,12 @@
                 // 直接加载全部内容
                 document.getElementById('question-editor').value = questionContent;
                 document.getElementById('answer-editor').value = answerContent;
-                showMessage('已成功加载全部内容');
+                showMessage('内容加载成功');
                 
                 // 更新预览
                 updatePreviews();
             } else {
-                showMessage('❌ 加载内容失败: ' + (result.errMsg || '未知错误'), false);
+                showMessage('加载失败: ' + (result.errMsg || '未知错误'), false);
             }
 
             // 恢复按钮状态
@@ -777,7 +771,7 @@
         const answerText = document.getElementById('answer-editor').value;
 
         if (!questionText && !answerText) {
-            showMessage('❌ 请输入要保存的题干内容或答案', false);
+            showMessage('请输入要保存的内容', false);
             return;
         }
 
@@ -788,14 +782,14 @@
 
         saveEditedText(problemId, questionText, answerText, function(result) {
             if (result.success) {
-                showMessage('保存成功！即将刷新...');
+                showMessage('保存成功');
                 
                 // 2秒后自动刷新页面
                 setTimeout(() => {
                     window.location.reload();
                 }, 2000);
             } else {
-                showMessage('❌ 保存失败: ' + (result.errMsg || result.error || '未知错误'), false);
+                showMessage('保存失败: ' + (result.errMsg || result.error || '未知错误'), false);
             }
 
             // 恢复按钮状态
@@ -850,8 +844,8 @@
 
     // 初始化
     function init() {
-        // 加载KaTeX CSS
-        loadKatexCSS();
+        // 加载所有CSS样式
+        loadStyles();
         
         // 等待页面加载完成
         if (document.readyState === 'loading') {
