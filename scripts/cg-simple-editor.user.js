@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.3.5
+// @version      1.3.6
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -13,12 +13,13 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js
 // @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css
+// @require      https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // 动态加载KaTeX CSS
+    // 动态加载KaTeX CSS和Font Awesome
     function loadKatexCSS() {
         if (document.querySelector('link[href*="katex"]')) return;
 
@@ -26,6 +27,12 @@
         link.rel = 'stylesheet';
         link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
         document.head.appendChild(link);
+        
+        // 加载Font Awesome CSS
+        const faLink = document.createElement('link');
+        faLink.rel = 'stylesheet';
+        faLink.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css';
+        document.head.appendChild(faLink);
     }
 
     // 使用KaTeX渲染内容，支持图片预览
@@ -292,8 +299,8 @@
             ">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
-                        <h3 style="margin: 0; color: #1890ff;">橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.5</span>
+                        <h3 style="margin: 0; color: #1890ff;"><i class="fas fa-edit" style="margin-right: 8px;"></i>橙果错题编辑器</h3>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.6</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -318,7 +325,7 @@
                             cursor: pointer;
                             font-size: 13px;
                             margin-right: 5px;
-                        ">📝 题干</button>
+                        "><i class="fas fa-file-alt" style="margin-right: 4px;"></i>题干</button>
                         <button id="tab-answer" style="
                             padding: 6px 12px;
                             background: #f0f0f0;
@@ -328,7 +335,7 @@
                             cursor: pointer;
                             font-size: 13px;
                             margin-right: 15px;
-                        ">📄 答案</button>
+                        "><i class="fas fa-file-text" style="margin-right: 4px;"></i>答案</button>
                         <div style="display: flex; gap: 8px;">
                             <button id="load-current" style="
                                 padding: 6px 12px;
@@ -338,7 +345,7 @@
                                 border-radius: 3px;
                                 cursor: pointer;
                                 font-size: 13px;
-                            ">加载</button>
+                            "><i class="fas fa-download" style="margin-right: 4px;"></i>加载</button>
                             <button id="save-all" style="
                                 padding: 6px 12px;
                                 background: #1890ff;
@@ -347,7 +354,7 @@
                                 border-radius: 3px;
                                 cursor: pointer;
                                 font-size: 13px;
-                            ">保存</button>
+                            "><i class="fas fa-save" style="margin-right: 4px;"></i>保存</button>
                         </div>
                     </div>
                     <div style="font-size: 11px; color: #666;">
@@ -360,10 +367,10 @@
                     <div id="question-area" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
 
                         <!-- 题干编辑双栏 -->
-                        <div style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
+                        <div id="question-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
                             <!-- 左侧题干内容输入框 -->
-                            <div style="flex: 1; display: flex; flex-direction: column;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">题干内容:</label>
+                            <div id="question-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-pen" style="margin-right: 4px;"></i>题干内容:</label>
                                 <textarea id="question-editor" style="
                                     flex: 1;
                                     width: 100%;
@@ -375,12 +382,13 @@
                                     font-size: 13px;
                                     line-height: 1.5;
                                     overflow-y: auto;
+                                    transition: all 0.3s ease;
                                 " placeholder="输入题干内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                             </div>
                             
                             <!-- 右侧新增输入框 -->
-                            <div style="flex: 1; display: flex; flex-direction: column;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">题干补充:</label>
+                            <div id="question-right" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-plus-circle" style="margin-right: 4px;"></i>题干补充:</label>
                                 <textarea id="question-supplement" style="
                                     flex: 1;
                                     width: 100%;
@@ -392,6 +400,7 @@
                                     font-size: 13px;
                                     line-height: 1.5;
                                     overflow-y: auto;
+                                    transition: all 0.3s ease;
                                 " placeholder="输入题干补充内容"></textarea>
                             </div>
                         </div>
@@ -399,10 +408,10 @@
                         <!-- 题干预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
 
-                            <div style="display: flex; gap: 15px;">
+                            <div id="question-preview-columns" style="display: flex; gap: 15px;">
                                 <!-- 左侧题干内容预览 -->
-                                <div style="flex: 1;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">题干预览:</label>
+                                <div id="question-preview-left" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>题干预览:</label>
                                     <div id="question-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -410,16 +419,18 @@
                                         background: #fafafa;
                                         height: 250px;
                                         overflow-y: auto;
+                                        transition: all 0.3s ease;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
+                                            <i class="fas fa-file-alt" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
                                             题干预览将在这里显示...
                                         </div>
                                     </div>
                                 </div>
                                 
                                 <!-- 右侧题干补充预览 -->
-                                <div style="flex: 1;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">题干补充预览:</label>
+                                <div id="question-preview-right" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>题干补充预览:</label>
                                     <div id="question-supplement-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -427,8 +438,10 @@
                                         background: #fafafa;
                                         height: 250px;
                                         overflow-y: auto;
+                                        transition: all 0.3s ease;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
+                                            <i class="fas fa-plus-circle" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
                                             题干补充预览将在这里显示...
                                         </div>
                                     </div>
@@ -441,10 +454,10 @@
                     <div id="answer-area" style="display: none; flex-direction: column; height: 100%; overflow: hidden;">
 
                         <!-- 答案编辑双栏 -->
-                        <div style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
+                        <div id="answer-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
                             <!-- 左侧答案内容输入框 -->
-                            <div style="flex: 1; display: flex; flex-direction: column;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">答案内容:</label>
+                            <div id="answer-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-pen" style="margin-right: 4px;"></i>答案内容:</label>
                                 <textarea id="answer-editor" style="
                                     flex: 1;
                                     width: 100%;
@@ -456,12 +469,13 @@
                                     font-size: 13px;
                                     line-height: 1.5;
                                     overflow-y: auto;
+                                    transition: all 0.3s ease;
                                 " placeholder="输入答案内容，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                             </div>
                             
                             <!-- 右侧新增输入框 -->
-                            <div style="flex: 1; display: flex; flex-direction: column;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">答案补充:</label>
+                            <div id="answer-right" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-plus-circle" style="margin-right: 4px;"></i>答案补充:</label>
                                 <textarea id="answer-supplement" style="
                                     flex: 1;
                                     width: 100%;
@@ -473,6 +487,7 @@
                                     font-size: 13px;
                                     line-height: 1.5;
                                     overflow-y: auto;
+                                    transition: all 0.3s ease;
                                 " placeholder="输入答案补充内容"></textarea>
                             </div>
                         </div>
@@ -480,10 +495,10 @@
                         <!-- 答案预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
 
-                            <div style="display: flex; gap: 15px;">
+                            <div id="answer-preview-columns" style="display: flex; gap: 15px;">
                                 <!-- 左侧答案内容预览 -->
-                                <div style="flex: 1;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">答案预览:</label>
+                                <div id="answer-preview-left" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>答案预览:</label>
                                     <div id="answer-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -491,16 +506,18 @@
                                         background: #fafafa;
                                         height: 250px;
                                         overflow-y: auto;
+                                        transition: all 0.3s ease;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
+                                            <i class="fas fa-file-text" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
                                             答案预览将在这里显示...
                                         </div>
                                     </div>
                                 </div>
                                 
                                 <!-- 右侧答案补充预览 -->
-                                <div style="flex: 1;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">答案补充预览:</label>
+                                <div id="answer-preview-right" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>答案补充预览:</label>
                                     <div id="answer-supplement-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -508,8 +525,10 @@
                                         background: #fafafa;
                                         height: 250px;
                                         overflow-y: auto;
+                                        transition: all 0.3s ease;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
+                                            <i class="fas fa-plus-circle" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
                                             答案补充预览将在这里显示...
                                         </div>
                                     </div>
@@ -542,7 +561,7 @@
         // 点击遮罩层关闭编辑器
         overlay.addEventListener('click', closeEditor);
 
-        // 添加预览更新事件
+        // 添加预览更新事件和动态宽度调整
         const questionEditor = document.getElementById('question-editor');
         const questionSupplement = document.getElementById('question-supplement');
         const answerEditor = document.getElementById('answer-editor');
@@ -559,16 +578,60 @@
                 editor.addEventListener('focus', function() {
                     this.style.borderColor = '#1890ff';
                     this.style.boxShadow = '0 0 0 2px rgba(24, 144, 255, 0.2)';
+                    
+                    // 动态调整宽度
+                    adjustColumnWidths(this.id, true);
                 });
                 
                 editor.addEventListener('blur', function() {
                     this.style.borderColor = '#d9d9d9';
                     this.style.boxShadow = 'none';
+                    
+                    // 恢复等宽布局
+                    adjustColumnWidths(this.id, false);
                 });
             });
         }
         
         setupPreviewUpdates();
+        
+        // 动态调整列宽度的函数
+        function adjustColumnWidths(editorId, isFocus) {
+            const questionLeft = document.getElementById('question-left');
+            const questionRight = document.getElementById('question-right');
+            const questionPreviewLeft = document.getElementById('question-preview-left');
+            const questionPreviewRight = document.getElementById('question-preview-right');
+            const answerLeft = document.getElementById('answer-left');
+            const answerRight = document.getElementById('answer-right');
+            const answerPreviewLeft = document.getElementById('answer-preview-left');
+            const answerPreviewRight = document.getElementById('answer-preview-right');
+            
+            // 设置宽度比例
+            const focusedWidth = isFocus ? 1.5 : 1;  // 60% vs 40% = 1.5:1
+            const unfocusedWidth = 1;
+            
+            if (editorId === 'question-editor') {
+                questionLeft.style.flex = focusedWidth;
+                questionRight.style.flex = unfocusedWidth;
+                questionPreviewLeft.style.flex = focusedWidth;
+                questionPreviewRight.style.flex = unfocusedWidth;
+            } else if (editorId === 'question-supplement') {
+                questionLeft.style.flex = unfocusedWidth;
+                questionRight.style.flex = focusedWidth;
+                questionPreviewLeft.style.flex = unfocusedWidth;
+                questionPreviewRight.style.flex = focusedWidth;
+            } else if (editorId === 'answer-editor') {
+                answerLeft.style.flex = focusedWidth;
+                answerRight.style.flex = unfocusedWidth;
+                answerPreviewLeft.style.flex = focusedWidth;
+                answerPreviewRight.style.flex = unfocusedWidth;
+            } else if (editorId === 'answer-supplement') {
+                answerLeft.style.flex = unfocusedWidth;
+                answerRight.style.flex = focusedWidth;
+                answerPreviewLeft.style.flex = unfocusedWidth;
+                answerPreviewRight.style.flex = focusedWidth;
+            }
+        }
 
         // 添加标签切换功能
         document.getElementById('tab-question').addEventListener('click', function() {
@@ -743,7 +806,7 @@
 
         // 创建悬浮按钮
         const floatButton = document.createElement('button');
-        floatButton.innerHTML = '✏️ 编辑器';
+        floatButton.innerHTML = '<i class="fas fa-edit" style="margin-right: 4px;"></i>编辑器';
         floatButton.style.cssText = `
             position: fixed;
             top: 50%;
