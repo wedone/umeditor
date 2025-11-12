@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.16
+// @version      1.5.17
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -15,8 +15,6 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js
 // @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css
-// @resource     faCSS https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css
-// @require      https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js
 // ==/UserScript==
 
 (function() {
@@ -27,10 +25,6 @@
         // 加载KaTeX CSS
         const katexCSS = GM_getResourceText('katexCSS');
         GM_addStyle(katexCSS);
-        
-        // 加载Font Awesome CSS
-        const faCSS = GM_getResourceText('faCSS');
-        GM_addStyle(faCSS);
     }
 
     // 创建共享的右侧源码编辑器组件
@@ -38,7 +32,7 @@
         return `
             <div id="${type}-right" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
                 <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">
-                    <i class="fas fa-plus-circle" style="margin-right: 4px;"></i>源码编辑
+                    🔧 源码编辑
                 </label>
                 <textarea id="${type}-supplement" style="
                     flex: 1;
@@ -62,7 +56,7 @@
         return `
             <div id="${type}-preview-right" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
                 <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">
-                    <i class="fas fa-eye" style="margin-right: 4px;"></i>${label}
+                    👁️ ${label}
                 </label>
                 <div id="${type}-supplement-preview" style="
                     border: 1px solid #e8e8e8;
@@ -74,7 +68,7 @@
                     transition: all 0.3s ease;
                 ">
                     <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                        <i class="fas fa-plus-circle" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
+                        <span style="font-size: 24px; margin-bottom: 8px; display: block;">🔧</span>
                         ${label}将在这里显示...
                     </div>
                 </div>
@@ -88,11 +82,11 @@
 
         // 检查内容中是否包含图片标签
         const hasImages = /<img[^>]*>/i.test(content);
-        
+
         if (hasImages) {
             // 如果包含图片，直接设置innerHTML（保留HTML标签）
             element.innerHTML = content;
-            
+
             // 仍然尝试渲染LaTeX公式
             if (window.renderMathInElement) {
                 try {
@@ -145,19 +139,19 @@
     // 保护HTML标签并过滤换行符
     function protectHtmlTagsAndFilterNewlines(content) {
         if (!content) return content;
-        
+
         // 如果内容不包含HTML标签，直接过滤换行符
         if (!/<[^>]+>/i.test(content)) {
             return content.replace(/\s*\n\s*/g, ' ');
         }
-        
+
         // 如果包含HTML标签，使用更复杂的方法
         // 将内容分割成文本和标签部分
         const parts = [];
         let currentIndex = 0;
         const tagRegex = /<[^>]+>/g;
         let match;
-        
+
         while ((match = tagRegex.exec(content)) !== null) {
             // 添加标签前的文本
             if (match.index > currentIndex) {
@@ -168,13 +162,13 @@
             parts.push({ type: 'tag', content: match[0] });
             currentIndex = match.index + match[0].length;
         }
-        
+
         // 添加剩余文本
         if (currentIndex < content.length) {
             const text = content.slice(currentIndex);
             parts.push({ type: 'text', content: text });
         }
-        
+
         // 处理文本部分，过滤换行符
         const processedParts = parts.map(part => {
             if (part.type === 'text') {
@@ -182,7 +176,7 @@
             }
             return part.content;
         });
-        
+
         return processedParts.join('');
     }
 
@@ -205,12 +199,12 @@
     function callPCApi(service, params, callback) {
         const pcSendUrl = 'https://www.91chengguo.com/api/pc/getJsonResult.do';
         const loginToken = getLoginToken();
-        
+
         if (!loginToken) {
             callback({ success: false, error: '未找到登录token' });
             return;
         }
-        
+
         const requestParams = {
             service: service,
             param: JSON.stringify({
@@ -218,12 +212,12 @@
                 ...params
             })
         };
-        
+
         const formData = new URLSearchParams();
         for (const key in requestParams) {
             formData.append(key, requestParams[key]);
         }
-        
+
         GM_xmlhttpRequest({
             method: "POST",
             url: pcSendUrl,
@@ -291,7 +285,7 @@
             </div>
         `;
         document.body.appendChild(messageDiv);
-        
+
         // 2秒后自动消失
         setTimeout(() => {
             if (messageDiv.parentElement) {
@@ -303,7 +297,7 @@
     // 创建编辑器界面
     function createEditor() {
         const problemId = getProblemIdFromUrl();
-        
+
         if (!problemId) {
             showMessage('未找到错题ID', false);
             return;
@@ -342,8 +336,8 @@
             ">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
-                        <h3 style="margin: 0; color: #1890ff;"><i class="fas fa-edit" style="margin-right: 8px;"></i>橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.16</span>
+                        <h3 style="margin: 0; color: #1890ff;">📝橙果错题编辑器</h3>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.17</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -355,7 +349,7 @@
                         font-size: 12px;
                     ">关闭</button>
                 </div>
-                
+
                 <!-- 切换标签和操作按钮 -->
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #e8e8e8; padding-bottom: 8px;">
                     <div style="display: flex; align-items: center;">
@@ -368,7 +362,7 @@
                             cursor: pointer;
                             font-size: 13px;
                             margin-right: 5px;
-                        "><i class="fas fa-file-alt" style="margin-right: 4px;"></i>题干</button>
+                        ">📄题干</button>
                         <button id="tab-answer" style="
                             padding: 6px 12px;
                             background: #f0f0f0;
@@ -378,7 +372,7 @@
                             cursor: pointer;
                             font-size: 13px;
                             margin-right: 15px;
-                        "><i class="fas fa-file-text" style="margin-right: 4px;"></i>答案</button>
+                        ">📝答案</button>
                         <div style="display: flex; gap: 8px;">
                             <button id="load-current" style="
                                 padding: 6px 12px;
@@ -388,7 +382,7 @@
                                 border-radius: 3px;
                                 cursor: pointer;
                                 font-size: 13px;
-                            "><i class="fas fa-download" style="margin-right: 4px;"></i>加载</button>
+                            ">📥加载</button>
                             <button id="save-all" style="
                                 padding: 6px 12px;
                                 background: #1890ff;
@@ -397,43 +391,37 @@
                                 border-radius: 3px;
                                 cursor: pointer;
                                 font-size: 13px;
-                            "><i class="fas fa-save" style="margin-right: 4px;"></i>保存</button>
+                            ">💾保存</button>
                         </div>
                     </div>
-                    
+
                     <!-- 复制按钮组 - 放在保存和错题ID之间 -->
                     <div style="display: flex; align-items: center; gap: 8px; margin-left: 15px;">
                         <button class="copy-btn" id="copy-to-orange" style="
-                            padding: 6px 12px;
+                            padding: 3px 8px;
                             background: #f0f0f0;
                             color: #666;
                             border: 1px solid #d9d9d9;
                             border-radius: 3px;
                             cursor: pointer;
-                            font-size: 13px;
-                            display: flex;
-                            align-items: center;
-                            gap: 4px;
-                        " title="源码 → 橙果码"><i class="fas fa-arrow-left"></i></button>
+                            font-size: 15px;
+                        " title="源码 → 橙果码">⬅</button>
                         <button class="copy-btn" id="copy-to-source" style="
-                            padding: 6px 12px;
+                            padding: 3px 8px;
                             background: #f0f0f0;
                             color: #666;
                             border: 1px solid #d9d9d9;
                             border-radius: 3px;
                             cursor: pointer;
-                            font-size: 13px;
-                            display: flex;
-                            align-items: center;
-                            gap: 4px;
-                        " title="橙果码 → 源码"><i class="fas fa-arrow-right"></i></button>
+                            font-size: 15px;
+                        " title="橙果码 → 源码">➡</button>
                     </div>
-                    
+
                     <div style="font-size: 11px; color: #666;">
                         错题ID: <strong>${problemId}</strong>
                     </div>
                 </div>
-                
+
                 <div style="flex: 1; overflow: hidden;">
                     <!-- 题干编辑区域 -->
                     <div id="question-area" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
@@ -442,7 +430,7 @@
                         <div id="question-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
                             <!-- 左侧题干橙果码输入框 -->
                             <div id="question-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-pen" style="margin-right: 4px;"></i>题干橙果码:</label>
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">✏️ 题干橙果码</label>
                                 <textarea id="question-editor" style="
                                     flex: 1;
                                     width: 100%;
@@ -457,18 +445,18 @@
                                     transition: all 0.3s ease;
                                 " placeholder="输入题干橙果码，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                             </div>
-                            
+
                             <!-- 右侧源码编辑器 -->
                             ${createSourceEditor('question', '输入源码')}
                         </div>
-                        
+
                         <!-- 题干预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
 
                             <div id="question-preview-columns" style="display: flex; gap: 15px;">
                                 <!-- 左侧题干预览 -->
                                 <div id="question-preview-left" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>题干预览:</label>
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">👁️ 题干预览</label>
                                     <div id="question-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -479,18 +467,18 @@
                                         transition: all 0.3s ease;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                            <i class="fas fa-file-alt" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
+                                            <span style="font-size: 24px; margin-bottom: 8px; display: block;">📄</span>
                                             题干预览将在这里显示...
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 <!-- 右侧源码预览 -->
                                 ${createSourcePreview('question', '源码预览')}
                             </div>
                         </div>
                     </div>
-                    
+
                     <!-- 答案编辑区域 -->
                     <div id="answer-area" style="display: none; flex-direction: column; height: 100%; overflow: hidden;">
 
@@ -498,7 +486,7 @@
                         <div id="answer-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
                             <!-- 左侧答案橙果码输入框 -->
                             <div id="answer-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;"><i class="fas fa-pen" style="margin-right: 4px;"></i>答案橙果码:</label>
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">✏️ 答案橙果码</label>
                                 <textarea id="answer-editor" style="
                                     flex: 1;
                                     width: 100%;
@@ -513,18 +501,18 @@
                                     transition: all 0.3s ease;
                                 " placeholder="输入答案橙果码，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                             </div>
-                            
+
                             <!-- 右侧源码编辑器 -->
                             ${createSourceEditor('answer', '输入源码')}
                         </div>
-                        
+
                         <!-- 答案预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
 
                             <div id="answer-preview-columns" style="display: flex; gap: 15px;">
                                 <!-- 左侧答案橙果码预览 -->
                                 <div id="answer-preview-left" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;"><i class="fas fa-eye" style="margin-right: 4px;"></i>答案预览:</label>
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">👁️ 答案预览</label>
                                     <div id="answer-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -535,19 +523,19 @@
                                         transition: all 0.3s ease;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                            <i class="fas fa-file-text" style="font-size: 24px; margin-bottom: 8px; display: block;"></i>
+                                            <span style="font-size: 24px; margin-bottom: 8px; display: block;">📝</span>
                                             答案预览将在这里显示...
                                         </div>
                                     </div>
                                 </div>
-                                
+
                                 <!-- 右侧源码预览 -->
                                 ${createSourcePreview('answer', '源码预览')}
                             </div>
                         </div>
                     </div>
                 </div>
-                
+
             </div>
         `;
 
@@ -567,7 +555,7 @@
 
         // 绑定事件
         document.getElementById('close-editor').addEventListener('click', closeEditor);
-        
+
         // 点击遮罩层关闭编辑器
         overlay.addEventListener('click', closeEditor);
 
@@ -576,7 +564,7 @@
         const questionSupplement = document.getElementById('question-supplement');
         const answerEditor = document.getElementById('answer-editor');
         const answerSupplement = document.getElementById('answer-supplement');
-        
+
         let previewTimeout;
         function setupPreviewUpdates() {
             // 为所有编辑器添加输入事件监听（用于预览更新）
@@ -586,32 +574,32 @@
                     previewTimeout = setTimeout(updatePreviews, 300);
                 });
             });
-            
+
             // 只为右侧编辑器（题干补充和答案补充）添加焦点事件监听
             [questionSupplement, answerSupplement].forEach(editor => {
                 editor.addEventListener('focus', function() {
                     this.style.borderColor = '#1890ff';
                     this.style.boxShadow = '0 0 0 2px rgba(24, 144, 255, 0.2)';
-                    
+
                     // 动态调整宽度 - 右侧获得焦点
                     adjustColumnWidths(this.id, true);
                 });
-                
+
                 editor.addEventListener('blur', function() {
                     this.style.borderColor = '#d9d9d9';
                     this.style.boxShadow = 'none';
-                    
+
                     // 恢复默认宽度 - 右侧失去焦点
                     adjustColumnWidths(this.id, false);
                 });
             });
         }
-        
+
         setupPreviewUpdates();
-        
+
         // 初始化宽度比例为60:40
         adjustColumnWidths('question-supplement', false);
-        
+
         // 动态调整列宽度的函数 - 只处理右侧编辑器
         function adjustColumnWidths(editorId, isFocus) {
             const questionLeft = document.getElementById('question-left');
@@ -622,11 +610,11 @@
             const answerRight = document.getElementById('answer-right');
             const answerPreviewLeft = document.getElementById('answer-preview-left');
             const answerPreviewRight = document.getElementById('answer-preview-right');
-            
+
             // 设置宽度比例：左侧默认60%，右侧默认40%
             const leftWidth = isFocus ? 1 : 1.5;    // 左侧：焦点在右侧时为40%，否则60%
             const rightWidth = isFocus ? 1.5 : 1;   // 右侧：焦点在右侧时为60%，否则40%
-            
+
             if (editorId === 'question-supplement') {
                 // 题干补充编辑器
                 questionLeft.style.flex = leftWidth;
@@ -677,7 +665,7 @@
                     // 根据当前激活的标签确定类型
                     const isQuestionTabActive = document.getElementById('question-area').style.display !== 'none';
                     const type = isQuestionTabActive ? 'question' : 'answer';
-                    
+
                     if (this.id === 'copy-to-source') {
                         // 橙果码 → 源码
                         const orangeContent = document.getElementById(`${type}-editor`).value;
@@ -705,7 +693,7 @@
             document.getElementById('tab-question').style.color = 'white';
             document.getElementById('tab-answer').style.background = '#f0f0f0';
             document.getElementById('tab-answer').style.color = '#666';
-            
+
             // 确保题干版面使用正确的60:40宽度比例
             adjustColumnWidths('question-supplement', false);
         }
@@ -717,7 +705,7 @@
             document.getElementById('tab-question').style.color = '#666';
             document.getElementById('tab-answer').style.background = '#1890ff';
             document.getElementById('tab-answer').style.color = 'white';
-            
+
             // 确保答案版面使用正确的60:40宽度比例
             adjustColumnWidths('answer-supplement', false);
         }
@@ -755,7 +743,7 @@
                 document.getElementById('question-editor').value = questionContent;
                 document.getElementById('answer-editor').value = answerContent;
                 showMessage('内容加载成功');
-                
+
                 // 更新预览
                 updatePreviews();
             } else {
@@ -827,7 +815,7 @@
         saveEditedText(problemId, questionText, answerText, function(result) {
             if (result.success) {
                 showMessage('保存成功');
-                
+
                 // 2秒后自动刷新页面
                 setTimeout(() => {
                     window.location.reload();
@@ -853,7 +841,7 @@
 
         // 创建悬浮按钮
         const floatButton = document.createElement('button');
-        floatButton.innerHTML = '<i class="fas fa-edit" style="margin-right: 4px;"></i>编辑器';
+        floatButton.innerHTML = '📝 编辑器';
         floatButton.style.cssText = `
             position: fixed;
             top: 50%;
@@ -890,7 +878,7 @@
     function init() {
         // 加载所有CSS样式
         loadStyles();
-        
+
         // 等待页面加载完成
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', addEditorButton);
