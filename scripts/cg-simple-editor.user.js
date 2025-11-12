@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.3.13
+// @version      1.5.16
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -343,7 +343,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
                         <h3 style="margin: 0; color: #1890ff;"><i class="fas fa-edit" style="margin-right: 8px;"></i>橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.3.13</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.16</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -400,6 +400,35 @@
                             "><i class="fas fa-save" style="margin-right: 4px;"></i>保存</button>
                         </div>
                     </div>
+                    
+                    <!-- 复制按钮组 - 放在保存和错题ID之间 -->
+                    <div style="display: flex; align-items: center; gap: 8px; margin-left: 15px;">
+                        <button class="copy-btn" id="copy-to-orange" style="
+                            padding: 6px 12px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 3px;
+                            cursor: pointer;
+                            font-size: 13px;
+                            display: flex;
+                            align-items: center;
+                            gap: 4px;
+                        " title="源码 → 橙果码"><i class="fas fa-arrow-left"></i></button>
+                        <button class="copy-btn" id="copy-to-source" style="
+                            padding: 6px 12px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 3px;
+                            cursor: pointer;
+                            font-size: 13px;
+                            display: flex;
+                            align-items: center;
+                            gap: 4px;
+                        " title="橙果码 → 源码"><i class="fas fa-arrow-right"></i></button>
+                    </div>
+                    
                     <div style="font-size: 11px; color: #666;">
                         错题ID: <strong>${problemId}</strong>
                     </div>
@@ -639,6 +668,34 @@
         document.getElementById('save-all').addEventListener('click', function() {
             saveAllContent(problemId);
         });
+
+        // 添加复制按钮事件监听
+        function setupCopyButtons() {
+            // 为所有复制按钮添加事件监听
+            document.querySelectorAll('.copy-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    // 根据当前激活的标签确定类型
+                    const isQuestionTabActive = document.getElementById('question-area').style.display !== 'none';
+                    const type = isQuestionTabActive ? 'question' : 'answer';
+                    
+                    if (this.id === 'copy-to-source') {
+                        // 橙果码 → 源码
+                        const orangeContent = document.getElementById(`${type}-editor`).value;
+                        document.getElementById(`${type}-supplement`).value = orangeContent;
+                        updatePreviews();
+                        showMessage(`${type === 'question' ? '题干' : '答案'}橙果码已复制到源码`);
+                    } else if (this.id === 'copy-to-orange') {
+                        // 源码 → 橙果码
+                        const sourceContent = document.getElementById(`${type}-supplement`).value;
+                        document.getElementById(`${type}-editor`).value = sourceContent;
+                        updatePreviews();
+                        showMessage(`${type === 'question' ? '题干' : '答案'}源码已复制到橙果码`);
+                    }
+                });
+            });
+        }
+
+        setupCopyButtons();
 
         // 标签切换函数
         function switchToQuestion() {
