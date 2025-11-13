@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.28
+// @version      1.5.29
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -430,7 +430,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.28</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.29</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -960,9 +960,65 @@
                             document.execCommand('redo');
                             break;
                         case 'paste':
-                            document.execCommand('paste');
-                            // 延迟更新预览，确保粘贴内容已插入
-                            setTimeout(updatePreviews, 100);
+                            console.log('粘贴按钮被点击，类型:', type, '编辑器ID:', sourceEditor.id);
+                            
+                            // 尝试使用现代Clipboard API
+                            if (navigator.clipboard && navigator.clipboard.readText) {
+                                console.log('使用Clipboard API读取剪贴板');
+                                navigator.clipboard.readText().then(text => {
+                                    console.log('剪贴板内容读取成功，长度:', text.length, '内容前50字符:', text.substring(0, 50));
+                                    
+                                    // 先清空编辑器内容
+                                    sourceEditor.value = '';
+                                    
+                                    // 插入剪贴板内容
+                                    sourceEditor.value = text;
+                                    
+                                    // 将光标移到末尾
+                                    sourceEditor.selectionStart = sourceEditor.selectionEnd = text.length;
+                                    
+                                    // 触发input事件以更新预览
+                                    const inputEvent = new Event('input', { bubbles: true });
+                                    sourceEditor.dispatchEvent(inputEvent);
+                                    
+                                    // 立即更新预览
+                                    updatePreviews();
+                                    
+                                    showMessage('内容已从剪贴板粘贴');
+                                    console.log('粘贴完成，编辑器新内容长度:', sourceEditor.value.length);
+                                }).catch(err => {
+                                    console.error('Clipboard API读取失败:', err);
+                                    showMessage('无法读取剪贴板内容，请确保已授予权限', false);
+                                    
+                                    // 回退到execCommand
+                                    console.log('尝试回退到execCommand');
+                                    try {
+                                        // 先清空编辑器内容
+                                        sourceEditor.value = '';
+                                        sourceEditor.focus();
+                                        document.execCommand('paste');
+                                        setTimeout(updatePreviews, 100);
+                                        showMessage('内容已粘贴（已清空原有内容）');
+                                    } catch (execErr) {
+                                        console.error('execCommand也失败:', execErr);
+                                        showMessage('粘贴失败，请使用Ctrl+V手动粘贴', false);
+                                    }
+                                });
+                            } else {
+                                console.log('Clipboard API不可用，使用execCommand');
+                                // 回退到execCommand
+                                try {
+                                    // 先清空编辑器内容
+                                    sourceEditor.value = '';
+                                    sourceEditor.focus();
+                                    document.execCommand('paste');
+                                    setTimeout(updatePreviews, 100);
+                                    showMessage('内容已粘贴（已清空原有内容）');
+                                } catch (err) {
+                                    console.error('execCommand失败:', err);
+                                    showMessage('粘贴失败，请使用Ctrl+V手动粘贴', false);
+                                }
+                            }
                             break;
                         case 'copy':
                             document.execCommand('copy');
