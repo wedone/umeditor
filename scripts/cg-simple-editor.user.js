@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.31
+// @version      1.5.32
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -431,7 +431,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.31</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.32</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -875,48 +875,15 @@
                             message = '已转换为MarkDown格式';
                             break;
                         case 'html':
-                            // 转HTML - 使用marked库将markdown转换为HTML，并应用自定义无序列表样式
+                            // 转HTML - 使用marked库将markdown转换为HTML，并对无序列表进行后处理
                             if (window.marked) {
                                 try {
-                                    // 定义自定义无序列表扩展
-                                    const customUnorderedList = {
-                                        name: 'customUnorderedList',
-                                        level: 'block',
-                                        start(src) {
-                                            return src.match(/^(\s*)- /)?.index;
-                                        },
-                                        tokenizer(src, tokens) {
-                                            const rule = /^(\s*)- (.*?)(\n|$)/s;
-                                            const match = rule.exec(src);
-                                            
-                                            if (match) {
-                                                const indentLength = match[1].length;
-                                                const depth = Math.floor(indentLength / 2) + 1;
-
-                                                return {
-                                                    type: 'customUnorderedList',
-                                                    raw: match[0],
-                                                    depth: depth,
-                                                    text: match[2].trim(),
-                                                    tokens: []
-                                                };
-                                            }
-                                        },
-                                        postprocess(token) {
-                                            token.text = this.parser.parseInline(token.text);
-                                        },
-                                        renderer(token) {
-                                            const indent = '  '.repeat(token.depth - 1);
-                                            return `${indent}<strong>・</strong> ${token.text}\n`;
-                                        }
-                                    };
-
-                                    // 使用自定义扩展解析Markdown
-                                    marked.use({
-                                        extensions: [customUnorderedList]
-                                    });
-
+                                    // 先使用marked默认解析
                                     convertedContent = marked.parse(sourceContent);
+                                    
+                                    // 对无序列表进行后处理：将ul/li转换为空格缩进和<strong>・</strong>
+                                    convertedContent = convertUnorderedLists(convertedContent);
+                                    
                                     message = '已使用marked将Markdown转换为HTML（自定义无序列表）';
                                 } catch (err) {
                                     console.error('Markdown转换HTML失败:', err);
@@ -939,6 +906,45 @@
                     showMessage(message);
                 });
             });
+        }
+
+        // 转换无序列表的函数 - 将ul/li转换为空格缩进和<strong>・</strong>
+        function convertUnorderedLists(html) {
+            if (!html) return html;
+            
+            // 创建一个临时容器来解析HTML
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = html;
+            
+            // 处理所有无序列表
+            const uls = tempDiv.querySelectorAll('ul');
+            uls.forEach(ul => {
+                // 计算缩进级别
+                let parent = ul.parentElement;
+                let indentLevel = 0;
+                while (parent && parent !== tempDiv) {
+                    if (parent.tagName === 'UL' || parent.tagName === 'OL') {
+                        indentLevel++;
+                    }
+                    parent = parent.parentElement;
+                }
+                
+                // 处理每个列表项
+                const lis = ul.querySelectorAll('li');
+                let newContent = '';
+                
+                lis.forEach(li => {
+                    const indent = '  '.repeat(indentLevel);
+                    const content = li.innerHTML.trim();
+                    newContent += `${indent}<strong>・</strong> ${content}\n`;
+                });
+                
+                // 用处理后的内容替换ul
+                const textNode = document.createTextNode(newContent);
+                ul.parentNode.replaceChild(textNode, ul);
+            });
+            
+            return tempDiv.innerHTML;
         }
 
         // 转换为橙果码格式的函数
