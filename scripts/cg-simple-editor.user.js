@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.26
+// @version      1.5.28
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -45,6 +45,50 @@
                         <i data-lucide="wrench" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i> 源码编辑
                     </label>
                     <div style="display: flex; gap: 4px;">
+                        <button class="edit-btn" data-type="${type}" id="${type}-undo-btn" style="display: flex; align-items: center; justify-content: center;
+                            padding: 2px 4px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="撤销"><i data-lucide="undo" style="width: 12px; height: 12px;"></i></button>
+                        <button class="edit-btn" data-type="${type}" id="${type}-redo-btn" style="display: flex; align-items: center; justify-content: center;
+                            padding: 2px 4px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="重做"><i data-lucide="redo" style="width: 12px; height: 12px;"></i></button>
+                        <button class="edit-btn" data-type="${type}" id="${type}-paste-btn" style="display: flex; align-items: center; justify-content: center;
+                            padding: 2px 4px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="粘贴"><i data-lucide="clipboard-paste" style="width: 12px; height: 12px;"></i></button>
+                        <button class="edit-btn" data-type="${type}" id="${type}-copy-btn" style="display: flex; align-items: center; justify-content: center;
+                            padding: 2px 4px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="复制"><i data-lucide="copy" style="width: 12px; height: 12px;"></i></button>
                         <button class="convert-btn" data-type="${type}" data-target="orange" style="
                             padding: 2px 6px;
                             background: #f0f0f0;
@@ -386,7 +430,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.26</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.28</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -443,6 +487,7 @@
                             "><i data-lucide="save" style="width: 14px; height: 14px;"></i> 保存</button>
                         </div>
                     </div>
+
 
                     <!-- 复制按钮组 - 放在保存和错题ID之间 -->
                     <div style="display: flex; align-items: center; gap: 8px; margin-left: 15px;">
@@ -659,7 +704,7 @@
         // 初始化宽度比例为60:40
         adjustColumnWidths('question-editor');
 
-        // 动态调整列宽度的函数 - 新逻辑：焦点在A侧时保持A6:B4，只有当焦点在B侧时才调整为A4:B6
+        // 动态调整列宽度的函数 - 修复逻辑：焦点在A侧时保持A6:B4，只有当焦点在B侧时才调整为A4:B6
         function adjustColumnWidths(editorId) {
             const questionLeft = document.getElementById('question-left');
             const questionRight = document.getElementById('question-right');
@@ -674,7 +719,7 @@
             const isLeftEditor = editorId === 'question-editor' || editorId === 'answer-editor';
             const isRightEditor = editorId === 'question-supplement' || editorId === 'answer-supplement';
 
-            // 设置宽度比例：焦点在左侧时左侧60%右侧40%，焦点在右侧时左侧40%右侧60%
+            // 设置宽度比例：默认左侧60%右侧40%，只有当焦点在右侧时才调整为左侧40%右侧60%
             const leftWidth = isRightEditor ? 1 : 1.5;    // 左侧：焦点在右侧时为40%，否则60%
             const rightWidth = isRightEditor ? 1.5 : 1;   // 右侧：焦点在右侧时为60%，否则40%
 
@@ -737,6 +782,68 @@
         }
 
         setupCopyButtons();
+
+        // 添加编辑按钮事件监听
+        function setupEditButtons() {
+            // 撤销按钮
+            document.getElementById('undo-btn').addEventListener('click', function() {
+                const isQuestionTabActive = document.getElementById('question-area').style.display !== 'none';
+                const type = isQuestionTabActive ? 'question' : 'answer';
+                const activeEditor = document.activeElement;
+                
+                if (activeEditor && (activeEditor.id === `${type}-editor` || activeEditor.id === `${type}-supplement`)) {
+                    document.execCommand('undo');
+                } else {
+                    showMessage('请先点击要撤销的编辑器', false);
+                }
+            });
+
+            // 重做按钮
+            document.getElementById('redo-btn').addEventListener('click', function() {
+                const isQuestionTabActive = document.getElementById('question-area').style.display !== 'none';
+                const type = isQuestionTabActive ? 'question' : 'answer';
+                const activeEditor = document.activeElement;
+                
+                if (activeEditor && (activeEditor.id === `${type}-editor` || activeEditor.id === `${type}-supplement`)) {
+                    document.execCommand('redo');
+                } else {
+                    showMessage('请先点击要重做的编辑器', false);
+                }
+            });
+
+            // 粘贴按钮
+            document.getElementById('paste-btn').addEventListener('click', function() {
+                const isQuestionTabActive = document.getElementById('question-area').style.display !== 'none';
+                const type = isQuestionTabActive ? 'question' : 'answer';
+                const activeEditor = document.activeElement;
+                
+                if (activeEditor && (activeEditor.id === `${type}-editor` || activeEditor.id === `${type}-supplement`)) {
+                    // 先聚焦确保粘贴操作正确
+                    activeEditor.focus();
+                    document.execCommand('paste');
+                    // 延迟更新预览，确保粘贴内容已插入
+                    setTimeout(updatePreviews, 100);
+                } else {
+                    showMessage('请先点击要粘贴的编辑器', false);
+                }
+            });
+
+            // 复制按钮
+            document.getElementById('copy-btn').addEventListener('click', function() {
+                const isQuestionTabActive = document.getElementById('question-area').style.display !== 'none';
+                const type = isQuestionTabActive ? 'question' : 'answer';
+                const activeEditor = document.activeElement;
+                
+                if (activeEditor && (activeEditor.id === `${type}-editor` || activeEditor.id === `${type}-supplement`)) {
+                    // 先聚焦确保复制操作正确
+                    activeEditor.focus();
+                    document.execCommand('copy');
+                    showMessage('内容已复制到剪贴板');
+                } else {
+                    showMessage('请先点击要复制的编辑器', false);
+                }
+            });
+        }
 
         // 添加转换按钮事件监听
         function setupConvertButtons() {
@@ -827,6 +934,48 @@
         }
 
         setupConvertButtons();
+        
+        // 添加源码编辑器编辑按钮事件监听
+        function setupSourceEditButtons() {
+            // 为所有源码编辑器的编辑按钮添加事件监听
+            document.querySelectorAll('.edit-btn[data-type]').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const type = this.getAttribute('data-type');
+                    const action = this.id.replace(`${type}-`, '').replace('-btn', '');
+                    const sourceEditor = document.getElementById(`${type}-supplement`);
+                    
+                    if (!sourceEditor) {
+                        showMessage('未找到对应的源码编辑器', false);
+                        return;
+                    }
+
+                    // 聚焦到源码编辑器
+                    sourceEditor.focus();
+
+                    switch (action) {
+                        case 'undo':
+                            document.execCommand('undo');
+                            break;
+                        case 'redo':
+                            document.execCommand('redo');
+                            break;
+                        case 'paste':
+                            document.execCommand('paste');
+                            // 延迟更新预览，确保粘贴内容已插入
+                            setTimeout(updatePreviews, 100);
+                            break;
+                        case 'copy':
+                            document.execCommand('copy');
+                            showMessage('源码内容已复制到剪贴板');
+                            break;
+                        default:
+                            showMessage('未知的编辑操作', false);
+                    }
+                });
+            });
+        }
+        
+        setupSourceEditButtons();
         
         // 初始化编辑器内的Lucide图标
         setTimeout(initLucideIcons, 100);
