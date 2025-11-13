@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.19
+// @version      1.5.24
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -374,7 +374,7 @@
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
                         <h3 style="margin: 0; color: #1890ff;">📝 橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.19</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.24</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -733,8 +733,8 @@
 
                     switch (target) {
                         case 'orange':
-                            // 转橙果码 - 这里可以添加具体的转换逻辑
-                            convertedContent = sourceContent;
+                            // 转橙果码 - 添加具体的转换逻辑
+                            convertedContent = convertToOrangeCode(sourceContent);
                             message = '已转换为橙果码格式';
                             break;
                         case 'markdown':
@@ -758,6 +758,48 @@
                     showMessage(message);
                 });
             });
+        }
+
+        // 转换为橙果码格式的函数
+        function convertToOrangeCode(content) {
+            if (!content) return '';
+            
+            let result = content;
+            
+            // 1. 处理LaTeX公式：将 $...$ 和 \(...\) 包装在 <span class="CgTex">$...$</span> 中
+            // 使用函数替换确保捕获组内容正确插入
+            result = result.replace(/\$([^$]+?)\$/g, function(match, formulaContent) {
+                return '<span class="CgTex">$' + formulaContent + '$</span>';
+            });
+            
+            result = result.replace(/\\\(([\s\S]+?)\\\)/g, function(match, formulaContent) {
+                return '<span class="CgTex">$' + formulaContent + '$</span>';
+            });
+            
+            // 2. 转义普通文本中的 < 为 <（但不转义公式内的）
+            // 使用一个临时标记来保护已经处理过的公式部分
+            const formulaRegex = /<span class="CgTex">[^<]*<\/span>/g;
+            const formulas = [];
+            let index = 0;
+            
+            // 提取所有公式并替换为临时标记
+            result = result.replace(formulaRegex, (match) => {
+                formulas.push(match);
+                return `__FORMULA_${index++}__`;
+            });
+            
+            // 转义剩余文本中的 <
+            result = result.replace(/</g, '<');
+            
+            // 恢复公式部分
+            formulas.forEach((formula, i) => {
+                result = result.replace(`__FORMULA_${i}__`, formula);
+            });
+            
+            // 3. 将所有换行符转换为 <br> 标签
+            result = result.replace(/\n/g, '<br>');
+            
+            return result;
         }
 
         setupConvertButtons();
