@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.30
+// @version      1.5.31
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -15,7 +15,7 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js
 // @require      https://unpkg.com/lucide@latest/dist/umd/lucide.js
-// @require      https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js
+// @require      https://cdn.jsdelivr.net/npm/marked/marked.min.js
 // @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css
 // ==/UserScript==
 
@@ -431,7 +431,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.30</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.31</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -875,11 +875,49 @@
                             message = '已转换为MarkDown格式';
                             break;
                         case 'html':
-                            // 转HTML - 使用marked库将markdown转换为HTML
+                            // 转HTML - 使用marked库将markdown转换为HTML，并应用自定义无序列表样式
                             if (window.marked) {
                                 try {
+                                    // 定义自定义无序列表扩展
+                                    const customUnorderedList = {
+                                        name: 'customUnorderedList',
+                                        level: 'block',
+                                        start(src) {
+                                            return src.match(/^(\s*)- /)?.index;
+                                        },
+                                        tokenizer(src, tokens) {
+                                            const rule = /^(\s*)- (.*?)(\n|$)/s;
+                                            const match = rule.exec(src);
+                                            
+                                            if (match) {
+                                                const indentLength = match[1].length;
+                                                const depth = Math.floor(indentLength / 2) + 1;
+
+                                                return {
+                                                    type: 'customUnorderedList',
+                                                    raw: match[0],
+                                                    depth: depth,
+                                                    text: match[2].trim(),
+                                                    tokens: []
+                                                };
+                                            }
+                                        },
+                                        postprocess(token) {
+                                            token.text = this.parser.parseInline(token.text);
+                                        },
+                                        renderer(token) {
+                                            const indent = '  '.repeat(token.depth - 1);
+                                            return `${indent}<strong>・</strong> ${token.text}\n`;
+                                        }
+                                    };
+
+                                    // 使用自定义扩展解析Markdown
+                                    marked.use({
+                                        extensions: [customUnorderedList]
+                                    });
+
                                     convertedContent = marked.parse(sourceContent);
-                                    message = '已使用marked将Markdown转换为HTML';
+                                    message = '已使用marked将Markdown转换为HTML（自定义无序列表）';
                                 } catch (err) {
                                     console.error('Markdown转换HTML失败:', err);
                                     convertedContent = sourceContent;
