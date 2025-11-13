@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.29
+// @version      1.5.30
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -15,6 +15,7 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js
 // @require      https://unpkg.com/lucide@latest/dist/umd/lucide.js
+// @require      https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js
 // @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css
 // ==/UserScript==
 
@@ -45,28 +46,6 @@
                         <i data-lucide="wrench" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i> 源码编辑
                     </label>
                     <div style="display: flex; gap: 4px;">
-                        <button class="edit-btn" data-type="${type}" id="${type}-undo-btn" style="display: flex; align-items: center; justify-content: center;
-                            padding: 2px 4px;
-                            background: #f0f0f0;
-                            color: #666;
-                            border: 1px solid #d9d9d9;
-                            border-radius: 2px;
-                            cursor: pointer;
-                            font-size: 10px;
-                            line-height: 1;
-                            height: 18px;
-                        " title="撤销"><i data-lucide="undo" style="width: 12px; height: 12px;"></i></button>
-                        <button class="edit-btn" data-type="${type}" id="${type}-redo-btn" style="display: flex; align-items: center; justify-content: center;
-                            padding: 2px 4px;
-                            background: #f0f0f0;
-                            color: #666;
-                            border: 1px solid #d9d9d9;
-                            border-radius: 2px;
-                            cursor: pointer;
-                            font-size: 10px;
-                            line-height: 1;
-                            height: 18px;
-                        " title="重做"><i data-lucide="redo" style="width: 12px; height: 12px;"></i></button>
                         <button class="edit-btn" data-type="${type}" id="${type}-paste-btn" style="display: flex; align-items: center; justify-content: center;
                             padding: 2px 4px;
                             background: #f0f0f0;
@@ -89,6 +68,28 @@
                             line-height: 1;
                             height: 18px;
                         " title="复制"><i data-lucide="copy" style="width: 12px; height: 12px;"></i></button>
+                        <button class="edit-btn" data-type="${type}" id="${type}-undo-btn" style="display: flex; align-items: center; justify-content: center;
+                            padding: 2px 4px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="撤销"><i data-lucide="undo" style="width: 12px; height: 12px;"></i></button>
+                        <button class="edit-btn" data-type="${type}" id="${type}-redo-btn" style="display: flex; align-items: center; justify-content: center;
+                            padding: 2px 4px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="重做"><i data-lucide="redo" style="width: 12px; height: 12px;"></i></button>
                         <button class="convert-btn" data-type="${type}" data-target="orange" style="
                             padding: 2px 6px;
                             background: #f0f0f0;
@@ -430,7 +431,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.29</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.30</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -874,9 +875,20 @@
                             message = '已转换为MarkDown格式';
                             break;
                         case 'html':
-                            // 转HTML - 这里可以添加具体的转换逻辑
-                            convertedContent = sourceContent;
-                            message = '已转换为HTML格式';
+                            // 转HTML - 使用marked库将markdown转换为HTML
+                            if (window.marked) {
+                                try {
+                                    convertedContent = marked.parse(sourceContent);
+                                    message = '已使用marked将Markdown转换为HTML';
+                                } catch (err) {
+                                    console.error('Markdown转换HTML失败:', err);
+                                    convertedContent = sourceContent;
+                                    message = 'Markdown转换失败，保持原内容';
+                                }
+                            } else {
+                                convertedContent = sourceContent;
+                                message = 'marked库未加载，保持原内容';
+                            }
                             break;
                         default:
                             showMessage('未知的转换类型', false);
