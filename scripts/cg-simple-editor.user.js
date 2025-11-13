@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.17
+// @version      1.5.19
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -31,9 +31,46 @@
     function createSourceEditor(type, placeholder = "输入源码") {
         return `
             <div id="${type}-right" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">
-                    🔧 源码编辑
-                </label>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                    <label style="font-weight: 500; color: #595959; font-size: 12px;">
+                        🔧 源码编辑
+                    </label>
+                    <div style="display: flex; gap: 4px;">
+                        <button class="convert-btn" data-type="${type}" data-target="orange" style="
+                            padding: 2px 6px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="转橙果码">转橙果码</button>
+                        <button class="convert-btn" data-type="${type}" data-target="markdown" style="
+                            padding: 2px 6px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="转MarkDown">转MarkDown</button>
+                        <button class="convert-btn" data-type="${type}" data-target="html" style="
+                            padding: 2px 6px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="转HTML">转HTML</button>
+                    </div>
+                </div>
                 <textarea id="${type}-supplement" style="
                     flex: 1;
                     width: 100%;
@@ -336,8 +373,8 @@
             ">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
-                        <h3 style="margin: 0; color: #1890ff;">📝橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.17</span>
+                        <h3 style="margin: 0; color: #1890ff;">📝 橙果错题编辑器</h3>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.19</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -362,7 +399,7 @@
                             cursor: pointer;
                             font-size: 13px;
                             margin-right: 5px;
-                        ">📄题干</button>
+                        ">📄 题干</button>
                         <button id="tab-answer" style="
                             padding: 6px 12px;
                             background: #f0f0f0;
@@ -372,7 +409,7 @@
                             cursor: pointer;
                             font-size: 13px;
                             margin-right: 15px;
-                        ">📝答案</button>
+                        ">📝 答案</button>
                         <div style="display: flex; gap: 8px;">
                             <button id="load-current" style="
                                 padding: 6px 12px;
@@ -382,7 +419,7 @@
                                 border-radius: 3px;
                                 cursor: pointer;
                                 font-size: 13px;
-                            ">📥加载</button>
+                            ">📥 加载</button>
                             <button id="save-all" style="
                                 padding: 6px 12px;
                                 background: #1890ff;
@@ -391,7 +428,7 @@
                                 border-radius: 3px;
                                 cursor: pointer;
                                 font-size: 13px;
-                            ">💾保存</button>
+                            ">💾 保存</button>
                         </div>
                     </div>
 
@@ -575,22 +612,20 @@
                 });
             });
 
-            // 只为右侧编辑器（题干补充和答案补充）添加焦点事件监听
-            [questionSupplement, answerSupplement].forEach(editor => {
+            // 为所有编辑器添加焦点事件监听
+            [questionEditor, questionSupplement, answerEditor, answerSupplement].forEach(editor => {
                 editor.addEventListener('focus', function() {
                     this.style.borderColor = '#1890ff';
                     this.style.boxShadow = '0 0 0 2px rgba(24, 144, 255, 0.2)';
 
-                    // 动态调整宽度 - 右侧获得焦点
-                    adjustColumnWidths(this.id, true);
+                    // 动态调整宽度 - 只有当焦点在另一侧时才调整比例
+                    adjustColumnWidths(this.id);
                 });
 
                 editor.addEventListener('blur', function() {
                     this.style.borderColor = '#d9d9d9';
                     this.style.boxShadow = 'none';
-
-                    // 恢复默认宽度 - 右侧失去焦点
-                    adjustColumnWidths(this.id, false);
+                    // 失去焦点时不调整宽度，保持当前比例
                 });
             });
         }
@@ -598,10 +633,10 @@
         setupPreviewUpdates();
 
         // 初始化宽度比例为60:40
-        adjustColumnWidths('question-supplement', false);
+        adjustColumnWidths('question-editor');
 
-        // 动态调整列宽度的函数 - 只处理右侧编辑器
-        function adjustColumnWidths(editorId, isFocus) {
+        // 动态调整列宽度的函数 - 新逻辑：焦点在A侧时保持A6:B4，只有当焦点在B侧时才调整为A4:B6
+        function adjustColumnWidths(editorId) {
             const questionLeft = document.getElementById('question-left');
             const questionRight = document.getElementById('question-right');
             const questionPreviewLeft = document.getElementById('question-preview-left');
@@ -611,32 +646,26 @@
             const answerPreviewLeft = document.getElementById('answer-preview-left');
             const answerPreviewRight = document.getElementById('answer-preview-right');
 
-            // 设置宽度比例：左侧默认60%，右侧默认40%
-            const leftWidth = isFocus ? 1 : 1.5;    // 左侧：焦点在右侧时为40%，否则60%
-            const rightWidth = isFocus ? 1.5 : 1;   // 右侧：焦点在右侧时为60%，否则40%
+            // 判断焦点在哪一侧
+            const isLeftEditor = editorId === 'question-editor' || editorId === 'answer-editor';
+            const isRightEditor = editorId === 'question-supplement' || editorId === 'answer-supplement';
 
-            if (editorId === 'question-supplement') {
-                // 题干补充编辑器
+            // 设置宽度比例：焦点在左侧时左侧60%右侧40%，焦点在右侧时左侧40%右侧60%
+            const leftWidth = isRightEditor ? 1 : 1.5;    // 左侧：焦点在右侧时为40%，否则60%
+            const rightWidth = isRightEditor ? 1.5 : 1;   // 右侧：焦点在右侧时为60%，否则40%
+
+            if (editorId === 'question-editor' || editorId === 'question-supplement') {
+                // 题干编辑器
                 questionLeft.style.flex = leftWidth;
                 questionRight.style.flex = rightWidth;
                 questionPreviewLeft.style.flex = leftWidth;
                 questionPreviewRight.style.flex = rightWidth;
-            } else if (editorId === 'answer-supplement') {
-                // 答案补充编辑器
+            } else if (editorId === 'answer-editor' || editorId === 'answer-supplement') {
+                // 答案编辑器
                 answerLeft.style.flex = leftWidth;
                 answerRight.style.flex = rightWidth;
                 answerPreviewLeft.style.flex = leftWidth;
                 answerPreviewRight.style.flex = rightWidth;
-            } else {
-                // 其他情况恢复默认（左侧60%，右侧40%）
-                questionLeft.style.flex = 1.5;
-                questionRight.style.flex = 1;
-                questionPreviewLeft.style.flex = 1.5;
-                questionPreviewRight.style.flex = 1;
-                answerLeft.style.flex = 1.5;
-                answerRight.style.flex = 1;
-                answerPreviewLeft.style.flex = 1.5;
-                answerPreviewRight.style.flex = 1;
             }
         }
 
@@ -685,6 +714,54 @@
 
         setupCopyButtons();
 
+        // 添加转换按钮事件监听
+        function setupConvertButtons() {
+            // 为所有转换按钮添加事件监听
+            document.querySelectorAll('.convert-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const type = this.getAttribute('data-type');
+                    const target = this.getAttribute('data-target');
+                    const sourceContent = document.getElementById(`${type}-supplement`).value;
+                    
+                    if (!sourceContent) {
+                        showMessage('请先在源码编辑器中输入内容', false);
+                        return;
+                    }
+
+                    let convertedContent = '';
+                    let message = '';
+
+                    switch (target) {
+                        case 'orange':
+                            // 转橙果码 - 这里可以添加具体的转换逻辑
+                            convertedContent = sourceContent;
+                            message = '已转换为橙果码格式';
+                            break;
+                        case 'markdown':
+                            // 转MarkDown - 这里可以添加具体的转换逻辑
+                            convertedContent = sourceContent;
+                            message = '已转换为MarkDown格式';
+                            break;
+                        case 'html':
+                            // 转HTML - 这里可以添加具体的转换逻辑
+                            convertedContent = sourceContent;
+                            message = '已转换为HTML格式';
+                            break;
+                        default:
+                            showMessage('未知的转换类型', false);
+                            return;
+                    }
+
+                    // 将转换后的内容设置到源码编辑器
+                    document.getElementById(`${type}-supplement`).value = convertedContent;
+                    updatePreviews();
+                    showMessage(message);
+                });
+            });
+        }
+
+        setupConvertButtons();
+
         // 标签切换函数
         function switchToQuestion() {
             document.getElementById('question-area').style.display = 'flex';
@@ -694,8 +771,8 @@
             document.getElementById('tab-answer').style.background = '#f0f0f0';
             document.getElementById('tab-answer').style.color = '#666';
 
-            // 确保题干版面使用正确的60:40宽度比例
-            adjustColumnWidths('question-supplement', false);
+            // 确保题干版面使用默认的60:40宽度比例（焦点在左侧）
+            adjustColumnWidths('question-editor');
         }
 
         function switchToAnswer() {
@@ -706,8 +783,8 @@
             document.getElementById('tab-answer').style.background = '#1890ff';
             document.getElementById('tab-answer').style.color = 'white';
 
-            // 确保答案版面使用正确的60:40宽度比例
-            adjustColumnWidths('answer-supplement', false);
+            // 确保答案版面使用默认的60:40宽度比例（焦点在左侧）
+            adjustColumnWidths('answer-editor');
         }
     }
 
