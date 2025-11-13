@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.24
+// @version      1.5.26
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -14,6 +14,7 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js
+// @require      https://unpkg.com/lucide@latest/dist/umd/lucide.js
 // @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css
 // ==/UserScript==
 
@@ -25,6 +26,14 @@
         // 加载KaTeX CSS
         const katexCSS = GM_getResourceText('katexCSS');
         GM_addStyle(katexCSS);
+        
+        // 添加旋转动画样式
+        GM_addStyle(`
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        `);
     }
 
     // 创建共享的右侧源码编辑器组件
@@ -33,7 +42,7 @@
             <div id="${type}-right" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                     <label style="font-weight: 500; color: #595959; font-size: 12px;">
-                        🔧 源码编辑
+                        <i data-lucide="wrench" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i> 源码编辑
                     </label>
                     <div style="display: flex; gap: 4px;">
                         <button class="convert-btn" data-type="${type}" data-target="orange" style="
@@ -93,7 +102,7 @@
         return `
             <div id="${type}-preview-right" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
                 <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">
-                    👁️ ${label}
+                    <i data-lucide="eye" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i> ${label}
                 </label>
                 <div id="${type}-supplement-preview" style="
                     border: 1px solid #e8e8e8;
@@ -105,7 +114,7 @@
                     transition: all 0.3s ease;
                 ">
                     <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                        <span style="font-size: 24px; margin-bottom: 8px; display: block;">🔧</span>
+                        <i data-lucide="wrench" style="width: 24px; height: 24px; display: block; margin-bottom: 8px; margin: 0 auto;"></i>
                         ${label}将在这里显示...
                     </div>
                 </div>
@@ -317,7 +326,7 @@
                 text-align: center;
                 white-space: nowrap;
             ">
-                <span style="margin-right: 8px;">${isSuccess ? '✅' : '❌'}</span>
+                <i data-lucide="${isSuccess ? 'check' : 'x'}" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle; margin-right: 8px;"></i>
                 ${message}
             </div>
         `;
@@ -373,8 +382,11 @@
             ">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e8e8e8; padding-bottom: 10px;">
                     <div style="display: flex; align-items: center;">
-                        <h3 style="margin: 0; color: #1890ff;">📝 橙果错题编辑器</h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.24</span>
+                        <h3 style="margin: 0; color: #1890ff; display: flex; align-items: center; gap: 8px;">
+                            <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
+                            橙果错题编辑器
+                        </h3>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.26</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -399,7 +411,7 @@
                             cursor: pointer;
                             font-size: 13px;
                             margin-right: 5px;
-                        ">📄 题干</button>
+                        "><i data-lucide="file-text" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i> 题干</button>
                         <button id="tab-answer" style="
                             padding: 6px 12px;
                             background: #f0f0f0;
@@ -409,9 +421,9 @@
                             cursor: pointer;
                             font-size: 13px;
                             margin-right: 15px;
-                        ">📝 答案</button>
+                        "><i data-lucide="edit-3" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i> 答案</button>
                         <div style="display: flex; gap: 8px;">
-                            <button id="load-current" style="
+                            <button id="load-current" style="display: flex; align-items: center; gap: 4px;
                                 padding: 6px 12px;
                                 background: #52c41a;
                                 color: white;
@@ -419,8 +431,8 @@
                                 border-radius: 3px;
                                 cursor: pointer;
                                 font-size: 13px;
-                            ">📥 加载</button>
-                            <button id="save-all" style="
+                            "><i data-lucide="download" style="width: 14px; height: 14px;"></i> 加载</button>
+                            <button id="save-all" style="display: flex; align-items: center; gap: 4px;
                                 padding: 6px 12px;
                                 background: #1890ff;
                                 color: white;
@@ -428,13 +440,13 @@
                                 border-radius: 3px;
                                 cursor: pointer;
                                 font-size: 13px;
-                            ">💾 保存</button>
+                            "><i data-lucide="save" style="width: 14px; height: 14px;"></i> 保存</button>
                         </div>
                     </div>
 
                     <!-- 复制按钮组 - 放在保存和错题ID之间 -->
                     <div style="display: flex; align-items: center; gap: 8px; margin-left: 15px;">
-                        <button class="copy-btn" id="copy-to-orange" style="
+                        <button class="copy-btn" id="copy-to-orange" style="display: flex; align-items: center; justify-content: center;
                             padding: 3px 8px;
                             background: #f0f0f0;
                             color: #666;
@@ -442,8 +454,8 @@
                             border-radius: 3px;
                             cursor: pointer;
                             font-size: 15px;
-                        " title="源码 → 橙果码">⬅</button>
-                        <button class="copy-btn" id="copy-to-source" style="
+                        " title="源码 → 橙果码"><i data-lucide="arrow-left" style="width: 14px; height: 14px;"></i></button>
+                        <button class="copy-btn" id="copy-to-source" style="display: flex; align-items: center; justify-content: center;
                             padding: 3px 8px;
                             background: #f0f0f0;
                             color: #666;
@@ -451,7 +463,7 @@
                             border-radius: 3px;
                             cursor: pointer;
                             font-size: 15px;
-                        " title="橙果码 → 源码">➡</button>
+                        " title="橙果码 → 源码"><i data-lucide="arrow-right" style="width: 14px; height: 14px;"></i></button>
                     </div>
 
                     <div style="font-size: 11px; color: #666;">
@@ -467,7 +479,10 @@
                         <div id="question-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
                             <!-- 左侧题干橙果码输入框 -->
                             <div id="question-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">✏️ 题干橙果码</label>
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 4px;">
+                                    <i data-lucide="edit" style="width: 14px; height: 14px;"></i>
+                                    题干橙果码
+                                </label>
                                 <textarea id="question-editor" style="
                                     flex: 1;
                                     width: 100%;
@@ -493,7 +508,10 @@
                             <div id="question-preview-columns" style="display: flex; gap: 15px;">
                                 <!-- 左侧题干预览 -->
                                 <div id="question-preview-left" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">👁️ 题干预览</label>
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 4px;">
+                                        <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
+                                        题干预览
+                                    </label>
                                     <div id="question-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -504,7 +522,7 @@
                                         transition: all 0.3s ease;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                            <span style="font-size: 24px; margin-bottom: 8px; display: block;">📄</span>
+                                            <i data-lucide="file-text" style="width: 24px; height: 24px; display: block; margin-bottom: 8px; margin: 0 auto;"></i>
                                             题干预览将在这里显示...
                                         </div>
                                     </div>
@@ -523,7 +541,10 @@
                         <div id="answer-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
                             <!-- 左侧答案橙果码输入框 -->
                             <div id="answer-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px;">✏️ 答案橙果码</label>
+                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 4px;">
+                                    <i data-lucide="edit" style="width: 14px; height: 14px;"></i>
+                                    答案橙果码
+                                </label>
                                 <textarea id="answer-editor" style="
                                     flex: 1;
                                     width: 100%;
@@ -549,7 +570,10 @@
                             <div id="answer-preview-columns" style="display: flex; gap: 15px;">
                                 <!-- 左侧答案橙果码预览 -->
                                 <div id="answer-preview-left" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
-                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: block;">👁️ 答案预览</label>
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 4px;">
+                                        <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
+                                        答案预览
+                                    </label>
                                     <div id="answer-preview" style="
                                         border: 1px solid #e8e8e8;
                                         border-radius: 6px;
@@ -560,7 +584,7 @@
                                         transition: all 0.3s ease;
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
-                                            <span style="font-size: 24px; margin-bottom: 8px; display: block;">📝</span>
+                                            <i data-lucide="edit-3" style="width: 24px; height: 24px; display: block; margin-bottom: 8px; margin: 0 auto;"></i>
                                             答案预览将在这里显示...
                                         </div>
                                     </div>
@@ -803,6 +827,9 @@
         }
 
         setupConvertButtons();
+        
+        // 初始化编辑器内的Lucide图标
+        setTimeout(initLucideIcons, 100);
 
         // 标签切换函数
         function switchToQuestion() {
@@ -834,7 +861,7 @@
     function loadCurrentContent(problemId) {
         const loadBtn = document.getElementById('load-current');
         const originalText = loadBtn.innerHTML;
-        loadBtn.innerHTML = '⏳ 加载中...';
+        loadBtn.innerHTML = '<i data-lucide="loader" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; animation: spin 1s linear infinite;"></i> 加载中...';
         loadBtn.disabled = true;
 
         getProblemDetail(problemId, function(result) {
@@ -928,7 +955,7 @@
 
         const saveBtn = document.getElementById('save-all');
         const originalText = saveBtn.innerHTML;
-        saveBtn.innerHTML = '⏳ 保存中...';
+        saveBtn.innerHTML = '<i data-lucide="loader" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; animation: spin 1s linear infinite;"></i> 保存中...';
         saveBtn.disabled = true;
 
         saveEditedText(problemId, questionText, answerText, function(result) {
@@ -960,7 +987,7 @@
 
         // 创建悬浮按钮
         const floatButton = document.createElement('button');
-        floatButton.innerHTML = '📝 编辑器';
+        floatButton.innerHTML = '<i data-lucide="notebook-pen" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i> 编辑器';
         floatButton.style.cssText = `
             position: fixed;
             top: 50%;
@@ -993,6 +1020,13 @@
         document.body.appendChild(floatButton);
     }
 
+    // 初始化Lucide图标
+    function initLucideIcons() {
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    }
+
     // 初始化
     function init() {
         // 加载所有CSS样式
@@ -1000,9 +1034,15 @@
 
         // 等待页面加载完成
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', addEditorButton);
+            document.addEventListener('DOMContentLoaded', function() {
+                addEditorButton();
+                // 延迟初始化图标，确保DOM完全加载
+                setTimeout(initLucideIcons, 100);
+            });
         } else {
             addEditorButton();
+            // 延迟初始化图标，确保DOM完全加载
+            setTimeout(initLucideIcons, 100);
         }
     }
 
