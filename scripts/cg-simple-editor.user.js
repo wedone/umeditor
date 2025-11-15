@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.38
+// @version      1.6.39
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -32,6 +32,87 @@
             @keyframes spin {
                 0% { transform: rotate(0deg); }
                 100% { transform: rotate(360deg); }
+            }
+        `);
+
+        // 添加侧边信息面板样式
+        GM_addStyle(`
+            /* 标签样式 */
+            .tag {
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 12px;
+                font-size: 11px;
+                margin: 2px;
+                color: white;
+                font-weight: 500;
+            }
+
+            .tag.mastery { background: #ff4d4f; }
+            .tag.source { background: #1890ff; }
+            .tag.type { background: #52c41a; }
+            .tag.subject { background: #722ed1; }
+            .tag.grade { background: #fa8c16; }
+
+            /* 图片链接样式 */
+            .image-link {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 8px;
+                margin: 4px 0;
+                border-radius: 4px;
+                text-decoration: none;
+                color: #1890ff;
+                font-size: 12px;
+                transition: background 0.2s;
+                border: 1px solid #e8e8e8;
+                background: white;
+            }
+
+            .image-link:hover {
+                background: #f0f7ff;
+                border-color: #1890ff;
+            }
+
+            /* 元数据样式 */
+            .meta-item {
+                display: flex;
+                justify-content: space-between;
+                padding: 4px 0;
+                font-size: 12px;
+            }
+
+            .meta-label {
+                color: #666;
+            }
+
+            .meta-value {
+                color: #333;
+                font-weight: 500;
+            }
+
+            /* 信息区域样式 */
+            .info-section {
+                margin-bottom: 20px;
+            }
+
+            .info-section:last-child {
+                margin-bottom: 0;
+            }
+
+            /* 标签云样式 */
+            .tag-cloud {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 4px;
+            }
+
+            /* 图片链接容器样式 */
+            .image-links {
+                display: flex;
+                flex-direction: column;
+                gap: 4px;
             }
         `);
     }
@@ -424,7 +505,7 @@
                 top: 50%;
                 left: 50%;
                 transform: translate(-50%, -50%);
-                width: 80%;
+                width: 90%;
                 height: 95%;
                 background: white;
                 border: 2px solid #1890ff;
@@ -441,7 +522,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.38</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.39</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -527,36 +608,38 @@
                     </div>
                 </div>
 
-                <div style="flex: 1; overflow: hidden;">
-                    <!-- 题干编辑区域 -->
-                    <div id="question-area" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
+                <div style="flex: 1; overflow: hidden; display: flex; gap: 15px;">
+                    <!-- 主要内容区域 -->
+                    <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                        <!-- 题干编辑区域 -->
+                        <div id="question-area" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
 
-                        <!-- 题干编辑双栏 -->
-                        <div id="question-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
-                            <!-- 左侧题干橙果码输入框 -->
-                            <div id="question-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
-                                <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 4px;">
-                                    <i data-lucide="edit" style="width: 14px; height: 14px;"></i>
-                                    题干橙果码
-                                </label>
-                                <textarea id="question-editor" style="
-                                    flex: 1;
-                                    width: 100%;
-                                    padding: 12px;
-                                    border: 1px solid #d9d9d9;
-                                    border-radius: 6px;
-                                    resize: none;
-                                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-                                    font-size: 13px;
-                                    line-height: 1.5;
-                                    overflow-y: auto;
-                                    transition: all 0.3s ease;
-                                " placeholder="输入题干橙果码，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
+                            <!-- 题干编辑双栏 -->
+                            <div id="question-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
+                                <!-- 左侧题干橙果码输入框 -->
+                                <div id="question-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
+                                    <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 4px;">
+                                        <i data-lucide="edit" style="width: 14px; height: 14px;"></i>
+                                        题干橙果码
+                                    </label>
+                                    <textarea id="question-editor" style="
+                                        flex: 1;
+                                        width: 100%;
+                                        padding: 12px;
+                                        border: 1px solid #d9d9d9;
+                                        border-radius: 6px;
+                                        resize: none;
+                                        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+                                        font-size: 13px;
+                                        line-height: 1.5;
+                                        overflow-y: auto;
+                                        transition: all 0.3s ease;
+                                    " placeholder="输入题干橙果码，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
+                                </div>
+
+                                <!-- 右侧源码编辑器 -->
+                                ${createSourceEditor('question', '输入源码')}
                             </div>
-
-                            <!-- 右侧源码编辑器 -->
-                            ${createSourceEditor('question', '输入源码')}
-                        </div>
 
                         <!-- 题干预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
@@ -648,6 +731,48 @@
 
                                 <!-- 右侧源码预览 -->
                                 ${createSourcePreview('answer', '源码预览')}
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <!-- 侧边信息面板 -->
+                    <div id="info-panel" style="width: 280px; border-left: 1px solid #e8e8e8; background: #fafafa; overflow-y: auto; display: flex; flex-direction: column;">
+                        <div style="padding: 15px; flex: 1;">
+                            <!-- 标签区域 -->
+                            <div class="info-section">
+                                <h4 style="margin: 0 0 10px 0; color: #595959; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="tags" style="width: 16px; height: 16px;"></i> 标签信息
+                                </h4>
+                                <div id="tag-cloud" class="tag-cloud">
+                                    <div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">
+                                        加载中...
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 图片信息区域 -->
+                            <div class="info-section">
+                                <h4 style="margin: 15px 0 10px 0; color: #595959; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="image" style="width: 16px; height: 16px;"></i> 图片资源
+                                </h4>
+                                <div id="image-links" class="image-links">
+                                    <div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">
+                                        无图片资源
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 元数据区域 -->
+                            <div class="info-section">
+                                <h4 style="margin: 15px 0 10px 0; color: #595959; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="info" style="width: 16px; height: 16px;"></i> 题目信息
+                                </h4>
+                                <div id="metadata" class="metadata">
+                                    <div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">
+                                        加载中...
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1308,6 +1433,159 @@
         }
     }
 
+    // 更新侧边信息面板
+    function updateInfoPanel(problemData) {
+        if (!problemData || !problemData.content) return;
+
+        const content = problemData.content;
+        
+        // 更新标签区域
+        updateTagCloud(content);
+        
+        // 更新图片资源区域
+        updateImageLinks(content);
+        
+        // 更新元数据区域
+        updateMetadata(content);
+    }
+
+    // 更新标签云
+    function updateTagCloud(content) {
+        const tagCloud = document.getElementById('tag-cloud');
+        if (!tagCloud) return;
+
+        const tags = [];
+        
+        // 从内容中提取标签信息
+        if (content.mastery) {
+            tags.push({ text: content.mastery, type: 'mastery' });
+        }
+        if (content.source) {
+            tags.push({ text: content.source, type: 'source' });
+        }
+        if (content.type) {
+            tags.push({ text: content.type, type: 'type' });
+        }
+        if (content.subject) {
+            tags.push({ text: content.subject, type: 'subject' });
+        }
+        if (content.grade) {
+            tags.push({ text: content.grade, type: 'grade' });
+        }
+
+        if (tags.length === 0) {
+            tagCloud.innerHTML = '<div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">无标签信息</div>';
+            return;
+        }
+
+        const tagsHtml = tags.map(tag =>
+            `<span class="tag ${tag.type}" title="${tag.text}">${tag.text}</span>`
+        ).join('');
+
+        tagCloud.innerHTML = tagsHtml;
+    }
+
+    // 更新图片链接
+    function updateImageLinks(content) {
+        const imageLinks = document.getElementById('image-links');
+        if (!imageLinks) return;
+
+        const images = [];
+        
+        // 从内容中提取图片URL
+        const questionContent = content.question || '';
+        const answerContent = content.answer || '';
+        
+        // 提取图片URL的正则表达式
+        const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/gi;
+        const allContent = questionContent + answerContent;
+        
+        let match;
+        while ((match = imgRegex.exec(allContent)) !== null) {
+            const src = match[1];
+            if (src && !images.includes(src)) {
+                images.push(src);
+            }
+        }
+
+        // 检查是否有特定的图片字段
+        if (content.originalUrl) {
+            images.push({ url: content.originalUrl, label: '题干图片' });
+        }
+        if (content.rightUrl) {
+            images.push({ url: content.rightUrl, label: '答案图片' });
+        }
+        if (content.remarkUrl) {
+            images.push({ url: content.remarkUrl, label: '备注图片' });
+        }
+
+        if (images.length === 0) {
+            imageLinks.innerHTML = '<div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">无图片资源</div>';
+            return;
+        }
+
+        const imagesHtml = images.map(img => {
+            const url = typeof img === 'string' ? img : img.url;
+            const label = typeof img === 'string' ? '图片' : img.label;
+            return `
+                <a href="${url}" class="image-link" target="_blank" title="${url}">
+                    <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
+                    ${label}
+                </a>
+            `;
+        }).join('');
+
+        imageLinks.innerHTML = imagesHtml;
+        
+        // 重新初始化图标
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    }
+
+    // 更新元数据
+    function updateMetadata(content) {
+        const metadata = document.getElementById('metadata');
+        if (!metadata) return;
+
+        const metaItems = [];
+        
+        // 添加基本信息
+        if (content.subject) {
+            metaItems.push({ label: '科目', value: content.subject });
+        }
+        if (content.grade) {
+            metaItems.push({ label: '年级', value: content.grade });
+        }
+        if (content.createTime) {
+            const date = new Date(content.createTime);
+            metaItems.push({ label: '创建时间', value: date.toLocaleDateString() });
+        }
+        if (content.mastery) {
+            metaItems.push({ label: '掌握程度', value: content.mastery });
+        }
+        if (content.type) {
+            metaItems.push({ label: '题目类型', value: content.type });
+        }
+        if (content.source) {
+            metaItems.push({ label: '题目来源', value: content.source });
+        }
+
+        if (metaItems.length === 0) {
+            metadata.innerHTML = '<div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">无题目信息</div>';
+            return;
+        }
+
+        const metaHtml = metaItems.map(item =>
+            `<div class="meta-item">
+                <span class="meta-label">${item.label}:</span>
+                <span class="meta-value">${item.value}</span>
+            </div>`
+        ).join('');
+
+        metadata.innerHTML = metaHtml;
+    }
+
     // 加载全部内容
     function loadCurrentContent(problemId) {
         const loadBtn = document.getElementById('load-current');
@@ -1339,6 +1617,10 @@
                 // 直接加载全部内容
                 document.getElementById('question-editor').value = questionContent;
                 document.getElementById('answer-editor').value = answerContent;
+                
+                // 更新侧边信息面板
+                updateInfoPanel(result);
+
                 showMessage('内容加载成功');
 
                 // 更新预览
