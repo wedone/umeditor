@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.34
-// @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑
+// @version      1.5.35
+// @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（无marked依赖）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
 // @grant        GM_xmlhttpRequest
@@ -15,7 +15,6 @@
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js
 // @require      https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/mhchem.min.js
 // @require      https://unpkg.com/lucide@latest/dist/umd/lucide.js
-// @require      https://cdn.jsdelivr.net/npm/marked/marked.min.js
 // @resource     katexCSS https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css
 // ==/UserScript==
 
@@ -431,7 +430,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.34</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.35</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -875,24 +874,15 @@
                             message = '已转换为MarkDown格式';
                             break;
                         case 'html':
-                            // 转HTML - 使用marked库将markdown转换为HTML，并对无序列表进行后处理
-                            if (window.marked) {
-                                try {
-                                    // 先使用marked默认解析
-                                    convertedContent = marked.parse(sourceContent);
-                                    
-                                    // 对无序列表进行后处理：将ul/li转换为空格缩进和<strong>・</strong>
-                                    convertedContent = convertUnorderedLists(convertedContent);
-                                    
-                                    message = '已使用marked将Markdown转换为HTML（自定义无序列表）';
-                                } catch (err) {
-                                    console.error('Markdown转换HTML失败:', err);
-                                    convertedContent = sourceContent;
-                                    message = 'Markdown转换失败，保持原内容';
-                                }
-                            } else {
+                            // 转HTML - 使用自定义解析器替代marked库
+                            try {
+                                // 使用增强版DOM解析器直接处理Markdown和HTML
+                                convertedContent = enhancedHtmlParser(sourceContent);
+                                message = '已转换为自定义HTML格式（无marked依赖）';
+                            } catch (err) {
+                                console.error('HTML转换失败:', err);
                                 convertedContent = sourceContent;
-                                message = 'marked库未加载，保持原内容';
+                                message = '转换失败，保持原内容';
                             }
                             break;
                         default:
@@ -908,8 +898,24 @@
             });
         }
 
-        // 转换无序列表的函数 - 将ul/li转换为空格缩进和<strong>・</strong>
-        function convertUnorderedLists(html) {
+        // 增强版HTML解析器 - 替代marked库功能
+        function enhancedHtmlParser(input) {
+            if (!input) return input;
+            
+            // 检测输入类型（HTML或Markdown）
+            const isHtml = /<[a-z][\s\S]*>/i.test(input);
+            
+            if (isHtml) {
+                // HTML输入：直接处理无序列表
+                return processHtmlLists(input);
+            } else {
+                // Markdown输入：先解析Markdown再处理
+                return processMarkdownLists(input);
+            }
+        }
+
+        // 处理HTML中的无序列表
+        function processHtmlLists(html) {
             if (!html) return html;
             
             // 创建一个临时容器来解析HTML
@@ -939,7 +945,7 @@
                     newContent += `${indent}<strong>・</strong> ${content}\n`;
                 });
                 
-                // 用处理后的内容替换ul - 直接使用HTML字符串替换，避免额外的div包裹
+                // 用处理后的内容替换ul
                 const tempSpan = document.createElement('span');
                 tempSpan.innerHTML = newContent;
                 
@@ -954,6 +960,70 @@
             
             return tempDiv.innerHTML;
         }
+
+        // 处理Markdown中的无序列表
+        function processMarkdownLists(markdown) {
+            if (!markdown) return markdown;
+            
+            const lines = markdown.split('\n');
+            const result = [];
+            let inList = false;
+            let currentIndent = 0;
+            let listStack = [];
+            
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                
+                // 检测Markdown无序列表项（-、*、+开头）
+                const listItemMatch = line.match(/^(\s*)([-*+])\s+(.*)$/);
+                
+                if (listItemMatch) {
+                    const indent = listItemMatch[1];
+                    const content = listItemMatch[3];
+                    const indentLevel = Math.floor(indent.length / 2);
+                    
+                    // 处理列表开始和状态管理
+                    if (!inList) {
+                        inList = true;
+                        currentIndent = indentLevel;
+                    }
+                    
+                    // 更新堆栈状态
+                    updateListStack(listStack, indentLevel);
+                    
+                    // 生成自定义格式
+                    const customIndent = '  '.repeat(indentLevel);
+                    result.push(`${customIndent}<strong>・</strong> ${content}`);
+                } else {
+                    // 非列表项
+                    if (inList && line.trim() === '') {
+                        // 空行结束列表
+                        inList = false;
+                        listStack = [];
+                        currentIndent = 0;
+                    }
+                    result.push(line);
+                }
+            }
+            
+            return result.join('\n');
+        }
+
+        // 更新列表堆栈状态
+        function updateListStack(stack, currentLevel) {
+            // 移除比当前级别高的堆栈项
+            while (stack.length > 0 && stack[stack.length - 1] >= currentLevel) {
+                stack.pop();
+            }
+            
+            // 添加当前级别
+            if (stack.length === 0 || stack[stack.length - 1] < currentLevel) {
+                stack.push(currentLevel);
+            }
+        }
+
+        // 保留原convertUnorderedLists函数作为兼容性别名
+        const convertUnorderedLists = processHtmlLists;
 
         // 转换为橙果码格式的函数
         function convertToOrangeCode(content) {
