@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.44
+// @version      1.6.45
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -124,7 +124,7 @@
                 left: 0;
                 width: 100%;
                 height: 100%;
-                background: rgba(0, 0, 0, 0.8);
+                background: transparent;
                 z-index: 10002;
                 display: none;
             }
@@ -146,6 +146,7 @@
                 overflow: auto;
                 max-width: 90vw;
                 max-height: 90vh;
+                border: 2px solid #1890ff;
             }
 
             .image-viewer-header {
@@ -616,7 +617,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.44</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.45</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
