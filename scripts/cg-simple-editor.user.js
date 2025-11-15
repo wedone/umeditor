@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.36
+// @version      1.5.37
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -430,7 +430,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.36</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.37</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -974,7 +974,10 @@
             for (let i = 0; i < lines.length; i++) {
                 let line = lines[i];
                 
-                // 先处理内联元素（粗体、斜体等）
+                // 先处理标题（行首标记）
+                line = processHeaders(line);
+                
+                // 再处理内联元素（粗体、斜体等）
                 line = processInlineElements(line);
                 
                 // 检测Markdown无序列表项（-、*、+开头）
@@ -1010,6 +1013,41 @@
             }
             
             return result.join('\n');
+        }
+
+        // 处理Markdown标题
+        function processHeaders(line) {
+            if (!line) return line;
+            
+            let result = line;
+            
+            // 处理各级标题：从 # 到 ######
+            // 一级标题：加粗 + 换行分隔
+            if (result.match(/^#\s+/)) {
+                result = result.replace(/^#\s+(.*)/, '<br><strong>$1</strong><br>');
+            }
+            // 二级标题：加粗 + 前置换行
+            else if (result.match(/^##\s+/)) {
+                result = result.replace(/^##\s+(.*)/, '<br><strong>$1</strong>');
+            }
+            // 三级标题：加粗
+            else if (result.match(/^###\s+/)) {
+                result = result.replace(/^###\s+(.*)/, '<strong>$1</strong>');
+            }
+            // 四级标题：斜体 + 加粗（橙果只渲染最内层，所以加粗放里面）
+            else if (result.match(/^####\s+/)) {
+                result = result.replace(/^####\s+(.*)/, '<em><strong>$1</strong></em>');
+            }
+            // 五级标题：斜体
+            else if (result.match(/^#####\s+/)) {
+                result = result.replace(/^#####\s+(.*)/, '<em>$1</em>');
+            }
+            // 六级标题：删除线
+            else if (result.match(/^######\s+/)) {
+                result = result.replace(/^######\s+(.*)/, '<del>$1</del>');
+            }
+            
+            return result;
         }
 
         // 处理Markdown内联元素
