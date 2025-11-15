@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.40
+// @version      1.6.41
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -151,28 +151,34 @@
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
-                padding: 12px 16px;
+                padding: 6px 12px;
                 border-bottom: 1px solid #e8e8e8;
                 background: #fafafa;
                 border-radius: 8px 8px 0 0;
                 cursor: move;
                 user-select: none;
+                min-height: 24px;
             }
 
             .image-viewer-title {
                 font-weight: 500;
                 color: #333;
-                font-size: 14px;
+                font-size: 12px;
             }
 
             .image-viewer-close {
                 background: none;
                 border: none;
-                font-size: 18px;
+                font-size: 16px;
                 cursor: pointer;
                 color: #666;
-                padding: 4px;
+                padding: 2px;
                 border-radius: 4px;
+                width: 20px;
+                height: 20px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
             }
 
             .image-viewer-close:hover {
@@ -609,7 +615,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.40</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.41</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -1543,21 +1549,40 @@
 
         const tags = [];
         
-        // 从内容中提取标签信息
-        if (content.mastery) {
-            tags.push({ text: content.mastery, type: 'mastery' });
-        }
-        if (content.source) {
-            tags.push({ text: content.source, type: 'source' });
-        }
-        if (content.type) {
-            tags.push({ text: content.type, type: 'type' });
-        }
-        if (content.subject) {
-            tags.push({ text: content.subject, type: 'subject' });
-        }
-        if (content.grade) {
-            tags.push({ text: content.grade, type: 'grade' });
+        // 如果存在tagList，则从tagList中提取标签
+        if (content.tagList && Array.isArray(content.tagList)) {
+            content.tagList.forEach(tag => {
+                let type = 'type'; // 默认类型
+                switch (tag.paramName) {
+                    case 'masteryLevel':
+                        type = 'mastery';
+                        break;
+                    case 'problemSource':
+                        type = 'source';
+                        break;
+                    // 可以根据需要添加其他映射
+                    default:
+                        type = 'type';
+                }
+                tags.push({ text: tag.name, type: type });
+            });
+        } else {
+            // 回退到原来的逻辑（如果tagList不存在）
+            if (content.mastery) {
+                tags.push({ text: content.mastery, type: 'mastery' });
+            }
+            if (content.source) {
+                tags.push({ text: content.source, type: 'source' });
+            }
+            if (content.type) {
+                tags.push({ text: content.type, type: 'type' });
+            }
+            if (content.subject) {
+                tags.push({ text: content.subject, type: 'subject' });
+            }
+            if (content.grade) {
+                tags.push({ text: content.grade, type: 'grade' });
+            }
         }
 
         if (tags.length === 0) {
