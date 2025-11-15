@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.42
+// @version      1.6.43
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -53,6 +53,7 @@
             .tag.type { background: #52c41a; }
             .tag.subject { background: #722ed1; }
             .tag.grade { background: #fa8c16; }
+            .tag.custom { background: #13c2c2; }
 
             /* 图片链接样式 */
             .image-link {
@@ -615,7 +616,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.42</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.43</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -1555,7 +1556,7 @@
 
         const tags = [];
         
-        // 如果存在tagList，则从tagList中提取标签
+        // 1. 处理tagList中的标签
         if (content.tagList && Array.isArray(content.tagList)) {
             content.tagList.forEach(tag => {
                 let type = 'type'; // 默认类型
@@ -1566,14 +1567,43 @@
                     case 'problemSource':
                         type = 'source';
                         break;
-                    // 可以根据需要添加其他映射
+                    case 'wrongTimes':
+                        type = 'grade'; // 错对次数显示为年级类型
+                        break;
+                    case 'paperTimes':
+                        type = 'subject'; // 组卷次数显示为科目类型
+                        break;
                     default:
                         type = 'type';
                 }
-                tags.push({ text: tag.name, type: type });
+                if (tag.name) {
+                    tags.push({ text: tag.name, type: type });
+                }
             });
-        } else {
-            // 回退到原来的逻辑（如果tagList不存在）
+        }
+
+        // 2. 处理questionTypeTags中的标签
+        if (content.questionTypeTags && Array.isArray(content.questionTypeTags)) {
+            content.questionTypeTags.forEach(tag => {
+                if (tag.name) {
+                    tags.push({ text: tag.name, type: 'type' });
+                }
+            });
+        }
+
+        // 3. 处理moreTagList中的标签
+        if (content.moreTagList && Array.isArray(content.moreTagList)) {
+            content.moreTagList.forEach(tag => {
+                // 使用tagValue作为标签文本，如果tagValue不存在则使用name
+                const tagText = tag.tagValue || tag.name;
+                if (tagText) {
+                    tags.push({ text: tagText, type: 'custom' });
+                }
+            });
+        }
+
+        // 4. 回退到原来的逻辑（如果上述标签列表都不存在）
+        if (tags.length === 0) {
             if (content.mastery) {
                 tags.push({ text: content.mastery, type: 'mastery' });
             }
