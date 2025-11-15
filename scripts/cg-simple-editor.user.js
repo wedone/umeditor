@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.37
+// @version      1.5.38
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -67,6 +67,17 @@
                             line-height: 1;
                             height: 18px;
                         " title="复制"><i data-lucide="copy" style="width: 12px; height: 12px;"></i></button>
+                        <button class="edit-btn" data-type="${type}" id="${type}-remove-empty-lines-btn" style="display: flex; align-items: center; justify-content: center;
+                            padding: 2px 4px;
+                            background: #f0f0f0;
+                            color: #666;
+                            border: 1px solid #d9d9d9;
+                            border-radius: 2px;
+                            cursor: pointer;
+                            font-size: 10px;
+                            line-height: 1;
+                            height: 18px;
+                        " title="清除空行"><i data-lucide="trash-2" style="width: 12px; height: 12px;"></i></button>
                         <button class="edit-btn" data-type="${type}" id="${type}-undo-btn" style="display: flex; align-items: center; justify-content: center;
                             padding: 2px 4px;
                             background: #f0f0f0;
@@ -430,7 +441,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.37</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.38</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -1231,6 +1242,33 @@
                         case 'copy':
                             document.execCommand('copy');
                             showMessage('源码内容已复制到剪贴板');
+                            break;
+                        case 'remove-empty-lines':
+                            // 清除空行功能
+                            let content = sourceEditor.value;
+                            if (!content) {
+                                showMessage('源码编辑器为空，无需清除', false);
+                                break;
+                            }
+                            
+                            // 分割为行，过滤掉空行（包括只包含空白字符的行）
+                            const lines = content.split('\n');
+                            const nonEmptyLines = lines.filter(line => line.trim() !== '');
+                            
+                            // 重新组合内容
+                            const newContent = nonEmptyLines.join('\n');
+                            
+                            // 更新编辑器内容
+                            sourceEditor.value = newContent;
+                            
+                            // 触发input事件以更新预览
+                            const removeEmptyLinesEvent = new Event('input', { bubbles: true });
+                            sourceEditor.dispatchEvent(removeEmptyLinesEvent);
+                            
+                            // 立即更新预览
+                            updatePreviews();
+                            
+                            showMessage(`已清除空行，原${lines.length}行，现${nonEmptyLines.length}行`);
                             break;
                         default:
                             showMessage('未知的编辑操作', false);
