@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.46
+// @version      1.6.47
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -617,7 +617,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.46</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.47</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -831,9 +831,21 @@
                     <!-- 侧边信息面板 -->
                     <div id="info-panel" style="width: 170px; border-left: 1px solid #e8e8e8; background: #fafafa; overflow-y: auto; display: flex; flex-direction: column;">
                         <div style="padding: 15px; flex: 1;">
-                            <!-- 标签区域 -->
+                            <!-- 错题信息区域 -->
                             <div class="info-section">
                                 <h4 style="margin: 0 0 10px 0; color: #595959; font-size: 14px; display: flex; align-items: center; gap: 6px;">
+                                    <i data-lucide="info" style="width: 16px; height: 16px;"></i> 错题信息
+                                </h4>
+                                <div id="metadata" class="metadata">
+                                    <div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">
+                                        加载中...
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- 标签区域 -->
+                            <div class="info-section">
+                                <h4 style="margin: 15px 0 10px 0; color: #595959; font-size: 14px; display: flex; align-items: center; gap: 6px;">
                                     <i data-lucide="tags" style="width: 16px; height: 16px;"></i> 标签信息
                                 </h4>
                                 <div id="tag-cloud" class="tag-cloud">
@@ -851,18 +863,6 @@
                                 <div id="image-links" class="image-links">
                                     <div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">
                                         无图片资源
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <!-- 元数据区域 -->
-                            <div class="info-section">
-                                <h4 style="margin: 15px 0 10px 0; color: #595959; font-size: 14px; display: flex; align-items: center; gap: 6px;">
-                                    <i data-lucide="info" style="width: 16px; height: 16px;"></i> 错题信息
-                                </h4>
-                                <div id="metadata" class="metadata">
-                                    <div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">
-                                        加载中...
                                     </div>
                                 </div>
                             </div>
@@ -1636,56 +1636,134 @@
         const imageLinks = document.getElementById('image-links');
         if (!imageLinks) return;
 
-        const images = [];
+        const mainImages = []; // 主要图片：题干图片、答案图片、备注图片
+        const questionImages = []; // 来自题干的图片
+        const answerImages = []; // 来自答案的图片
         
-        // 从内容中提取图片URL
+        // 提取主要图片字段
+        if (content.originalUrl) {
+            mainImages.push({ url: content.originalUrl, label: '题干图片' });
+        }
+        if (content.rightUrl) {
+            mainImages.push({ url: content.rightUrl, label: '答案图片' });
+        }
+        if (content.remarkUrl) {
+            mainImages.push({ url: content.remarkUrl, label: '备注图片' });
+        }
+
+        // 从题干内容中提取图片URL
         const questionContent = content.question || '';
-        const answerContent = content.answer || '';
-        
-        // 提取图片URL的正则表达式
         const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/gi;
-        const allContent = questionContent + answerContent;
-        
         let match;
-        while ((match = imgRegex.exec(allContent)) !== null) {
+        
+        // 提取题干图片
+        while ((match = imgRegex.exec(questionContent)) !== null) {
             const src = match[1];
-            if (src && !images.includes(src)) {
-                images.push(src);
+            if (src && !mainImages.some(img => img.url === src) && !questionImages.includes(src)) {
+                questionImages.push(src);
+            }
+        }
+        
+        // 提取答案图片
+        const answerContent = content.answer || '';
+        while ((match = imgRegex.exec(answerContent)) !== null) {
+            const src = match[1];
+            if (src && !mainImages.some(img => img.url === src) && !answerImages.includes(src)) {
+                answerImages.push(src);
             }
         }
 
-        // 检查是否有特定的图片字段
-        if (content.originalUrl) {
-            images.push({ url: content.originalUrl, label: '题干图片' });
-        }
-        if (content.rightUrl) {
-            images.push({ url: content.rightUrl, label: '答案图片' });
-        }
-        if (content.remarkUrl) {
-            images.push({ url: content.remarkUrl, label: '备注图片' });
+        // 构建HTML
+        let imagesHtml = '';
+
+        // 1. 显示主要图片（题干图片、答案图片、备注图片）
+        if (mainImages.length > 0) {
+            imagesHtml += mainImages.map(img => `
+                <a href="javascript:void(0)" class="image-link" data-image-url="${img.url}" title="${img.url}">
+                    <i data-lucide="image" style="width: 14px; height: 14px;"></i>
+                    ${img.label}
+                </a>
+            `).join('');
         }
 
-        if (images.length === 0) {
+        // 2. 显示来自题干的图片
+        if (questionImages.length > 0) {
+            imagesHtml += '<div style="margin-top: 8px; font-size: 11px; color: #666; font-weight: 500;">来自题干:</div>';
+            if (questionImages.length > 8) {
+                // 多于8张则多行显示，每行4张
+                imagesHtml += '<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">';
+                questionImages.forEach((src, index) => {
+                    imagesHtml += `
+                        <a href="javascript:void(0)" class="image-link-small" data-image-url="${src}" title="${src}" style="
+                            padding: 4px 6px;
+                            font-size: 10px;
+                            flex: 0 0 calc(25% - 4px);
+                            min-width: 0;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
+                        ">
+                            <i data-lucide="image" style="width: 10px; height: 10px;"></i>
+                            图${index + 1}
+                        </a>
+                    `;
+                });
+                imagesHtml += '</div>';
+            } else {
+                // 少于等于8张则正常显示
+                imagesHtml += questionImages.map((src, index) => `
+                    <a href="javascript:void(0)" class="image-link" data-image-url="${src}" title="${src}">
+                        <i data-lucide="image" style="width: 14px; height: 14px;"></i>
+                        题干图${index + 1}
+                    </a>
+                `).join('');
+            }
+        }
+
+        // 3. 显示来自答案的图片
+        if (answerImages.length > 0) {
+            imagesHtml += '<div style="margin-top: 8px; font-size: 11px; color: #666; font-weight: 500;">来自答案:</div>';
+            if (answerImages.length > 8) {
+                // 多于8张则多行显示，每行4张
+                imagesHtml += '<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">';
+                answerImages.forEach((src, index) => {
+                    imagesHtml += `
+                        <a href="javascript:void(0)" class="image-link-small" data-image-url="${src}" title="${src}" style="
+                            padding: 4px 6px;
+                            font-size: 10px;
+                            flex: 0 0 calc(25% - 4px);
+                            min-width: 0;
+                            overflow: hidden;
+                            text-overflow: ellipsis;
+                            white-space: nowrap;
+                        ">
+                            <i data-lucide="image" style="width: 10px; height: 10px;"></i>
+                            图${index + 1}
+                        </a>
+                    `;
+                });
+                imagesHtml += '</div>';
+            } else {
+                // 少于等于8张则正常显示
+                imagesHtml += answerImages.map((src, index) => `
+                    <a href="javascript:void(0)" class="image-link" data-image-url="${src}" title="${src}">
+                        <i data-lucide="image" style="width: 14px; height: 14px;"></i>
+                        答案图${index + 1}
+                    </a>
+                `).join('');
+            }
+        }
+
+        if (mainImages.length === 0 && questionImages.length === 0 && answerImages.length === 0) {
             imageLinks.innerHTML = '<div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">无图片资源</div>';
             return;
         }
 
-        const imagesHtml = images.map((img, index) => {
-            const url = typeof img === 'string' ? img : img.url;
-            const label = typeof img === 'string' ? '图片' + (index + 1) : img.label;
-            return `
-                <a href="javascript:void(0)" class="image-link" data-image-url="${url}" title="${url}">
-                    <i data-lucide="image" style="width: 14px; height: 14px;"></i>
-                    ${label}
-                </a>
-            `;
-        }).join('');
-
         imageLinks.innerHTML = imagesHtml;
         
-        // 为图片链接添加点击事件
-        const imageLinkElements = imageLinks.querySelectorAll('.image-link');
-        imageLinkElements.forEach(link => {
+        // 为所有图片链接添加点击事件
+        const allImageLinks = imageLinks.querySelectorAll('.image-link, .image-link-small');
+        allImageLinks.forEach(link => {
             link.addEventListener('click', function(e) {
                 e.preventDefault();
                 const imageUrl = this.getAttribute('data-image-url');
