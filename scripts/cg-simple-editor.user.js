@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.45
+// @version      1.6.46
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -617,7 +617,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.45</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.46</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -698,9 +698,6 @@
                         " title="橙果码 → 源码"><i data-lucide="arrow-right" style="width: 14px; height: 14px;"></i></button>
                     </div>
 
-                    <div style="font-size: 11px; color: #666;">
-                        错题ID: <strong>${problemId}</strong>
-                    </div>
                 </div>
 
                 <div style="flex: 1; overflow: hidden; display: flex; gap: 15px;">
@@ -861,7 +858,7 @@
                             <!-- 元数据区域 -->
                             <div class="info-section">
                                 <h4 style="margin: 15px 0 10px 0; color: #595959; font-size: 14px; display: flex; align-items: center; gap: 6px;">
-                                    <i data-lucide="info" style="width: 16px; height: 16px;"></i> 题目信息
+                                    <i data-lucide="info" style="width: 16px; height: 16px;"></i> 错题信息
                                 </h4>
                                 <div id="metadata" class="metadata">
                                     <div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">
@@ -1711,6 +1708,14 @@
 
         const metaItems = [];
         
+        // 添加错题ID和用户错题ID
+        if (content.problemId) {
+            metaItems.push({ label: '错题ID', value: content.problemId });
+        }
+        if (content.userProblemId) {
+            metaItems.push({ label: '用户错题ID', value: content.userProblemId });
+        }
+        
         // 添加基本信息
         if (content.subject) {
             metaItems.push({ label: '科目', value: content.subject });
@@ -1733,7 +1738,7 @@
         }
 
         if (metaItems.length === 0) {
-            metadata.innerHTML = '<div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">无题目信息</div>';
+            metadata.innerHTML = '<div style="color: #999; font-style: italic; font-size: 12px; text-align: center; padding: 10px;">无错题信息</div>';
             return;
         }
 
