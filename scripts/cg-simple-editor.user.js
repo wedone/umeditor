@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.5.35
-// @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（无marked依赖）
+// @version      1.5.36
+// @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
 // @grant        GM_xmlhttpRequest
@@ -430,7 +430,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.35</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.5.36</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -972,7 +972,10 @@
             let listStack = [];
             
             for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
+                let line = lines[i];
+                
+                // 先处理内联元素（粗体、斜体等）
+                line = processInlineElements(line);
                 
                 // 检测Markdown无序列表项（-、*、+开头）
                 const listItemMatch = line.match(/^(\s*)([-*+])\s+(.*)$/);
@@ -1007,6 +1010,39 @@
             }
             
             return result.join('\n');
+        }
+
+        // 处理Markdown内联元素
+        function processInlineElements(line) {
+            if (!line) return line;
+            
+            let result = line;
+            
+            // 处理粗体：**粗体** 或 __粗体__
+            result = result.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            result = result.replace(/__(.*?)__/g, '<strong>$1</strong>');
+            
+            // 处理斜体：*斜体* 或 _斜体_
+            result = result.replace(/\*(.*?)\*/g, '<em>$1</em>');
+            result = result.replace(/_(.*?)_/g, '<em>$1</em>');
+            
+            // 处理删除线：~~删除线~~
+            result = result.replace(/~~(.*?)~~/g, '<del>$1</del>');
+            
+            // 处理行内代码：`代码`
+            result = result.replace(/`(.*?)`/g, '<code>$1</code>');
+            
+            // 处理链接：[文本](URL)
+            result = result.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>');
+            
+            // 处理图片：![alt](URL)
+            result = result.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1">');
+            
+            // 处理换行：两个空格或反斜杠结尾
+            result = result.replace(/  \n/g, '<br>\n');
+            result = result.replace(/\\\n/g, '<br>\n');
+            
+            return result;
         }
 
         // 更新列表堆栈状态
