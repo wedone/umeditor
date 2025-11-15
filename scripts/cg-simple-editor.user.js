@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.39
+// @version      1.6.40
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -68,6 +68,7 @@
                 transition: background 0.2s;
                 border: 1px solid #e8e8e8;
                 background: white;
+                cursor: pointer;
             }
 
             .image-link:hover {
@@ -113,6 +114,92 @@
                 display: flex;
                 flex-direction: column;
                 gap: 4px;
+            }
+
+            /* 悬浮图片查看器样式 */
+            .image-viewer-overlay {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: rgba(0, 0, 0, 0.8);
+                z-index: 10002;
+                display: none;
+            }
+
+            .image-viewer-container {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: white;
+                border-radius: 8px;
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+                z-index: 10003;
+                display: flex;
+                flex-direction: column;
+                min-width: 300px;
+                min-height: 200px;
+                resize: both;
+                overflow: auto;
+                max-width: 90vw;
+                max-height: 90vh;
+            }
+
+            .image-viewer-header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 12px 16px;
+                border-bottom: 1px solid #e8e8e8;
+                background: #fafafa;
+                border-radius: 8px 8px 0 0;
+                cursor: move;
+                user-select: none;
+            }
+
+            .image-viewer-title {
+                font-weight: 500;
+                color: #333;
+                font-size: 14px;
+            }
+
+            .image-viewer-close {
+                background: none;
+                border: none;
+                font-size: 18px;
+                cursor: pointer;
+                color: #666;
+                padding: 4px;
+                border-radius: 4px;
+            }
+
+            .image-viewer-close:hover {
+                background: #f0f0f0;
+                color: #333;
+            }
+
+            .image-viewer-content {
+                flex: 1;
+                padding: 16px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                overflow: auto;
+            }
+
+            .image-viewer-img {
+                max-width: 100%;
+                max-height: 100%;
+                object-fit: contain;
+                border-radius: 4px;
+            }
+
+            /* 调整大小手柄样式 */
+            .image-viewer-container::-webkit-resizer {
+                background: #1890ff;
+                border-radius: 2px;
             }
         `);
     }
@@ -522,7 +609,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.39</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.40</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -1524,18 +1611,30 @@
             return;
         }
 
-        const imagesHtml = images.map(img => {
+        const imagesHtml = images.map((img, index) => {
             const url = typeof img === 'string' ? img : img.url;
-            const label = typeof img === 'string' ? '图片' : img.label;
+            const label = typeof img === 'string' ? '图片' + (index + 1) : img.label;
             return `
-                <a href="${url}" class="image-link" target="_blank" title="${url}">
-                    <i data-lucide="external-link" style="width: 14px; height: 14px;"></i>
+                <a href="javascript:void(0)" class="image-link" data-image-url="${url}" title="${url}">
+                    <i data-lucide="image" style="width: 14px; height: 14px;"></i>
                     ${label}
                 </a>
             `;
         }).join('');
 
         imageLinks.innerHTML = imagesHtml;
+        
+        // 为图片链接添加点击事件
+        const imageLinkElements = imageLinks.querySelectorAll('.image-link');
+        imageLinkElements.forEach(link => {
+            link.addEventListener('click', function(e) {
+                e.preventDefault();
+                const imageUrl = this.getAttribute('data-image-url');
+                if (imageUrl) {
+                    showImageViewer(imageUrl);
+                }
+            });
+        });
         
         // 重新初始化图标
         if (window.lucide) {
@@ -1777,6 +1876,102 @@
             // 延迟初始化图标，确保DOM完全加载
             setTimeout(initLucideIcons, 100);
         }
+    }
+
+    // 悬浮图片查看器
+    function showImageViewer(imageUrl) {
+        // 创建遮罩层
+        const overlay = document.createElement('div');
+        overlay.className = 'image-viewer-overlay';
+        overlay.style.display = 'block';
+
+        // 创建图片查看器容器
+        const container = document.createElement('div');
+        container.className = 'image-viewer-container';
+        container.style.width = '600px';
+        container.style.height = '400px';
+
+        // 获取文件名用于标题
+        const fileName = imageUrl.split('/').pop() || '图片';
+
+        container.innerHTML = `
+            <div class="image-viewer-header">
+                <span class="image-viewer-title">${fileName}</span>
+                <button class="image-viewer-close" title="关闭">×</button>
+            </div>
+            <div class="image-viewer-content">
+                <img src="${imageUrl}" class="image-viewer-img" alt="${fileName}">
+            </div>
+        `;
+
+        // 添加到页面
+        document.body.appendChild(overlay);
+        document.body.appendChild(container);
+
+        // 关闭功能
+        const closeBtn = container.querySelector('.image-viewer-close');
+        closeBtn.addEventListener('click', closeImageViewer);
+        overlay.addEventListener('click', closeImageViewer);
+
+        // 拖动功能
+        let isDragging = false;
+        let dragOffset = { x: 0, y: 0 };
+        const header = container.querySelector('.image-viewer-header');
+
+        header.addEventListener('mousedown', startDrag);
+        document.addEventListener('mousemove', doDrag);
+        document.addEventListener('mouseup', stopDrag);
+
+        function startDrag(e) {
+            if (e.target === closeBtn) return;
+            isDragging = true;
+            const rect = container.getBoundingClientRect();
+            dragOffset.x = e.clientX - rect.left;
+            dragOffset.y = e.clientY - rect.top;
+            container.style.cursor = 'grabbing';
+            e.preventDefault();
+        }
+
+        function doDrag(e) {
+            if (!isDragging) return;
+            
+            const x = e.clientX - dragOffset.x;
+            const y = e.clientY - dragOffset.y;
+            
+            // 限制在可视区域内
+            const maxX = window.innerWidth - container.offsetWidth;
+            const maxY = window.innerHeight - container.offsetHeight;
+            
+            container.style.left = Math.max(0, Math.min(x, maxX)) + 'px';
+            container.style.top = Math.max(0, Math.min(y, maxY)) + 'px';
+            container.style.transform = 'none';
+        }
+
+        function stopDrag() {
+            isDragging = false;
+            container.style.cursor = '';
+        }
+
+        // 阻止事件冒泡，防止点击内容区域关闭查看器
+        container.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // ESC键关闭
+        document.addEventListener('keydown', function escHandler(e) {
+            if (e.key === 'Escape') {
+                closeImageViewer();
+                document.removeEventListener('keydown', escHandler);
+            }
+        });
+    }
+
+    function closeImageViewer() {
+        const overlay = document.querySelector('.image-viewer-overlay');
+        const container = document.querySelector('.image-viewer-container');
+        
+        if (overlay) overlay.remove();
+        if (container) container.remove();
     }
 
     // 启动脚本
