@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.47
+// @version      1.6.48
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -253,7 +253,7 @@
                             font-size: 10px;
                             line-height: 1;
                             height: 18px;
-                        " title="清除空行"><i data-lucide="trash-2" style="width: 12px; height: 12px;"></i></button>
+                        " title="清除空行"><i data-lucide="brush-cleaning" style="width: 12px; height: 12px;"></i></button>
                         <button class="edit-btn" data-type="${type}" id="${type}-undo-btn" style="display: flex; align-items: center; justify-content: center;
                             padding: 2px 4px;
                             background: #f0f0f0;
@@ -563,6 +563,9 @@
         `;
         document.body.appendChild(messageDiv);
 
+        // 立即初始化消息中的图标
+        setTimeout(initLucideIcons, 10);
+
         // 2秒后自动消失
         setTimeout(() => {
             if (messageDiv.parentElement) {
@@ -617,7 +620,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.47</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.48</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -1688,33 +1691,31 @@
 
         // 2. 显示来自题干的图片
         if (questionImages.length > 0) {
-            imagesHtml += '<div style="margin-top: 8px; font-size: 11px; color: #666; font-weight: 500;">来自题干:</div>';
-            if (questionImages.length > 8) {
-                // 多于8张则多行显示，每行4张
+            imagesHtml += '<div style="margin-top: 8px; font-size: 11px; color: #666; font-weight: 500;">题干内:</div>';
+            if (questionImages.length > 4) {
+                // 多于4张则多行显示，每行2张
                 imagesHtml += '<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">';
                 questionImages.forEach((src, index) => {
                     imagesHtml += `
-                        <a href="javascript:void(0)" class="image-link-small" data-image-url="${src}" title="${src}" style="
-                            padding: 4px 6px;
-                            font-size: 10px;
-                            flex: 0 0 calc(25% - 4px);
+                        <a href="javascript:void(0)" class="image-link" data-image-url="${src}" title="${src}" style="
+                            flex: 0 0 calc(50% - 4px);
                             min-width: 0;
                             overflow: hidden;
                             text-overflow: ellipsis;
                             white-space: nowrap;
                         ">
-                            <i data-lucide="image" style="width: 10px; height: 10px;"></i>
-                            图${index + 1}
+                            <i data-lucide="image" style="width: 14px; height: 14px;"></i>
+                             图片${index + 1}
                         </a>
                     `;
                 });
                 imagesHtml += '</div>';
             } else {
-                // 少于等于8张则正常显示
+                // 少于等于4张则正常显示
                 imagesHtml += questionImages.map((src, index) => `
                     <a href="javascript:void(0)" class="image-link" data-image-url="${src}" title="${src}">
                         <i data-lucide="image" style="width: 14px; height: 14px;"></i>
-                        题干图${index + 1}
+                         图片${index + 1}
                     </a>
                 `).join('');
             }
@@ -1722,33 +1723,31 @@
 
         // 3. 显示来自答案的图片
         if (answerImages.length > 0) {
-            imagesHtml += '<div style="margin-top: 8px; font-size: 11px; color: #666; font-weight: 500;">来自答案:</div>';
-            if (answerImages.length > 8) {
-                // 多于8张则多行显示，每行4张
+            imagesHtml += '<div style="margin-top: 8px; font-size: 11px; color: #666; font-weight: 500;">答案内:</div>';
+            if (answerImages.length > 4) {
+                // 多于4张则多行显示，每行2张
                 imagesHtml += '<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">';
                 answerImages.forEach((src, index) => {
                     imagesHtml += `
-                        <a href="javascript:void(0)" class="image-link-small" data-image-url="${src}" title="${src}" style="
-                            padding: 4px 6px;
-                            font-size: 10px;
-                            flex: 0 0 calc(25% - 4px);
+                        <a href="javascript:void(0)" class="image-link" data-image-url="${src}" title="${src}" style="
+                            flex: 0 0 calc(50% - 4px);
                             min-width: 0;
                             overflow: hidden;
                             text-overflow: ellipsis;
                             white-space: nowrap;
                         ">
-                            <i data-lucide="image" style="width: 10px; height: 10px;"></i>
-                            图${index + 1}
+                            <i data-lucide="image" style="width: 14px; height: 14px;"></i>
+                             图片${index + 1}
                         </a>
                     `;
                 });
                 imagesHtml += '</div>';
             } else {
-                // 少于等于8张则正常显示
+                // 少于等于4张则正常显示
                 imagesHtml += answerImages.map((src, index) => `
                     <a href="javascript:void(0)" class="image-link" data-image-url="${src}" title="${src}">
                         <i data-lucide="image" style="width: 14px; height: 14px;"></i>
-                        答案图${index + 1}
+                         图片${index + 1}
                     </a>
                 `).join('');
             }
@@ -1774,9 +1773,7 @@
         });
         
         // 重新初始化图标
-        if (window.lucide) {
-            lucide.createIcons();
-        }
+        setTimeout(initLucideIcons, 10);
     }
 
     // 更新元数据
@@ -1836,6 +1833,9 @@
         const originalText = loadBtn.innerHTML;
         loadBtn.innerHTML = '<i data-lucide="loader" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; animation: spin 1s linear infinite;"></i> 加载中...';
         loadBtn.disabled = true;
+        
+        // 立即初始化加载按钮中的图标
+        setTimeout(initLucideIcons, 10);
 
         getProblemDetail(problemId, function(result) {
             if (result.success && result.content) {
@@ -1876,6 +1876,9 @@
             // 恢复按钮状态
             loadBtn.innerHTML = originalText;
             loadBtn.disabled = false;
+            
+            // 恢复按钮后重新初始化图标
+            setTimeout(initLucideIcons, 10);
         });
     }
 
@@ -1900,7 +1903,7 @@
             renderWithKaTeX(document.getElementById('question-supplement-preview'), questionSupplementText);
         } else {
             document.getElementById('question-supplement-preview').innerHTML =
-                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题干补充预览将在这里显示...</div>';
+                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">源码预览将在这里显示...</div>';
         }
 
         // 更新答案内容预览
@@ -1916,7 +1919,7 @@
             renderWithKaTeX(document.getElementById('answer-supplement-preview'), answerSupplementText);
         } else {
             document.getElementById('answer-supplement-preview').innerHTML =
-                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">答案补充预览将在这里显示...</div>';
+                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">源码预览将在这里显示...</div>';
         }
     }
 
@@ -1934,6 +1937,9 @@
         const originalText = saveBtn.innerHTML;
         saveBtn.innerHTML = '<i data-lucide="loader" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; animation: spin 1s linear infinite;"></i> 保存中...';
         saveBtn.disabled = true;
+        
+        // 立即初始化保存按钮中的图标
+        setTimeout(initLucideIcons, 10);
 
         saveEditedText(problemId, questionText, answerText, function(result) {
             if (result.success) {
@@ -1950,6 +1956,9 @@
             // 恢复按钮状态
             saveBtn.innerHTML = originalText;
             saveBtn.disabled = false;
+            
+            // 恢复按钮后重新初始化图标
+            setTimeout(initLucideIcons, 10);
         });
     }
 
@@ -2000,7 +2009,17 @@
     // 初始化Lucide图标
     function initLucideIcons() {
         if (window.lucide) {
-            lucide.createIcons();
+            try {
+                lucide.createIcons();
+            } catch (e) {
+                console.warn('Lucide图标初始化失败:', e);
+                // 如果初始化失败，延迟重试
+                setTimeout(initLucideIcons, 100);
+            }
+        } else {
+            // 如果Lucide库还未加载，延迟重试
+            console.log('Lucide库未加载，等待重试...');
+            setTimeout(initLucideIcons, 100);
         }
     }
 
