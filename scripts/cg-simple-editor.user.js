@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.48
+// @version      1.6.49
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -620,7 +620,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.48</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.49</span>
                     </div>
                     <button id="close-editor" style="
                         background: #ff4d4f;
@@ -679,8 +679,8 @@
                     </div>
 
 
-                    <!-- 复制按钮组 - 放在保存和错题ID之间 -->
-                    <div style="display: flex; align-items: center; gap: 8px; margin-left: 15px;">
+                    <!-- 复制按钮组 - 水平居中显示 -->
+                    <div style="display: flex; align-items: center; gap: 8px; position: absolute; left: 50%; transform: translateX(-50%);">
                         <button class="copy-btn" id="copy-to-orange" style="display: flex; align-items: center; justify-content: center;
                             padding: 3px 8px;
                             background: #f0f0f0;
