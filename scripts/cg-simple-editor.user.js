@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.50
-// @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题干和答案，支持双栏编辑（增强版Markdown解析）
+// @version      1.6.51
+// @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题目和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
 // @grant        GM_xmlhttpRequest
@@ -620,7 +620,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.50</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.51</span>
                     </div>
                     <button id="close-editor" class="image-viewer-close" title="关闭">×</button>
                 </div>
@@ -637,7 +637,7 @@
                             cursor: pointer;
                             font-size: 13px;
                             margin-right: 5px;
-                        "><i data-lucide="file-text" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i> 题干</button>
+                        "><i data-lucide="file-text" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle;"></i> 题目</button>
                         <button id="tab-answer" style="
                             padding: 6px 12px;
                             background: #f0f0f0;
@@ -698,16 +698,16 @@
                 <div style="flex: 1; overflow: hidden; display: flex; gap: 15px;">
                     <!-- 主要内容区域 -->
                     <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-                        <!-- 题干编辑区域 -->
+                        <!-- 题目编辑区域 -->
                         <div id="question-area" style="display: flex; flex-direction: column; height: 100%; overflow: hidden;">
 
-                            <!-- 题干编辑双栏 -->
+                            <!-- 题目编辑双栏 -->
                             <div id="question-columns" style="display: flex; gap: 15px; flex: 1; overflow: hidden;">
-                                <!-- 左侧题干橙果码输入框 -->
+                                <!-- 左侧题目橙果码输入框 -->
                                 <div id="question-left" class="editor-column" style="flex: 1; display: flex; flex-direction: column; transition: flex 0.3s ease;">
                                     <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 4px;">
                                         <i data-lucide="edit" style="width: 14px; height: 14px;"></i>
-                                        题干橙果码
+                                        题目橙果码
                                     </label>
                                     <textarea id="question-editor" style="
                                         flex: 1;
@@ -721,22 +721,22 @@
                                         line-height: 1.5;
                                         overflow-y: auto;
                                         transition: all 0.3s ease;
-                                    " placeholder="输入题干橙果码，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
+                                    " placeholder="输入题目橙果码，支持LaTeX公式：$...$ 或 $$...$$"></textarea>
                                 </div>
 
                                 <!-- 右侧源码编辑器 -->
                                 ${createSourceEditor('question', '输入源码')}
                             </div>
 
-                        <!-- 题干预览双栏 -->
+                        <!-- 题目预览双栏 -->
                         <div style="margin-top: 10px; flex-shrink: 0;">
 
                             <div id="question-preview-columns" style="display: flex; gap: 15px;">
-                                <!-- 左侧题干预览 -->
+                                <!-- 左侧题目预览 -->
                                 <div id="question-preview-left" class="preview-column" style="flex: 1; transition: flex 0.3s ease;">
                                     <label style="font-weight: 500; color: #595959; font-size: 12px; margin-bottom: 5px; display: flex; align-items: center; gap: 4px;">
                                         <i data-lucide="eye" style="width: 14px; height: 14px;"></i>
-                                        题干预览
+                                        题目预览
                                     </label>
                                     <div id="question-preview" style="
                                         border: 1px solid #e8e8e8;
@@ -749,7 +749,7 @@
                                     ">
                                         <div style="color: #999; font-style: italic; text-align: center; padding: 20px;">
                                             <i data-lucide="file-text" style="width: 24px; height: 24px; display: block; margin-bottom: 8px; margin: 0 auto;"></i>
-                                            题干预览将在这里显示...
+                                            题目预览将在这里显示...
                                         </div>
                                     </div>
                                 </div>
@@ -947,7 +947,7 @@
             const rightWidth = isRightEditor ? 1.5 : 1;   // 右侧：焦点在右侧时为60%，否则40%
 
             if (editorId === 'question-editor' || editorId === 'question-supplement') {
-                // 题干编辑器
+                // 题目编辑器
                 questionLeft.style.flex = leftWidth;
                 questionRight.style.flex = rightWidth;
                 questionPreviewLeft.style.flex = leftWidth;
@@ -992,13 +992,13 @@
                         const orangeContent = document.getElementById(`${type}-editor`).value;
                         document.getElementById(`${type}-supplement`).value = orangeContent;
                         updatePreviews();
-                        showMessage(`${type === 'question' ? '题干' : '答案'}橙果码已复制到源码`);
+                        showMessage(`${type === 'question' ? '题目' : '答案'}橙果码已复制到源码`);
                     } else if (this.id === 'copy-to-orange') {
                         // 源码 → 橙果码
                         const sourceContent = document.getElementById(`${type}-supplement`).value;
                         document.getElementById(`${type}-editor`).value = sourceContent;
                         updatePreviews();
-                        showMessage(`${type === 'question' ? '题干' : '答案'}源码已复制到橙果码`);
+                        showMessage(`${type === 'question' ? '题目' : '答案'}源码已复制到橙果码`);
                     }
                 });
             });
@@ -1509,7 +1509,7 @@
             document.getElementById('tab-answer').style.background = '#f0f0f0';
             document.getElementById('tab-answer').style.color = '#666';
 
-            // 确保题干版面使用默认的60:40宽度比例（焦点在左侧）
+            // 确保题目版面使用默认的60:40宽度比例（焦点在左侧）
             adjustColumnWidths('question-editor');
         }
 
@@ -1620,10 +1620,59 @@
         }
 
         const tagsHtml = tags.map(tag =>
-            `<span class="tag ${tag.type}" title="${tag.text}">${tag.text}</span>`
+            `<span class="tag ${tag.type}" title="${tag.text}" style="cursor: pointer;">${tag.text}</span>`
         ).join('');
 
         tagCloud.innerHTML = tagsHtml;
+        
+        // 为所有标签添加点击事件
+        const tagElements = tagCloud.querySelectorAll('.tag');
+        tagElements.forEach(tag => {
+            tag.addEventListener('click', function() {
+                openTagEditor();
+            });
+        });
+    }
+
+    // 打开标签编辑窗口
+    function openTagEditor() {
+        // 先关闭脚本面板，确保标签编辑窗口能显示在最前面
+        const editorContainer = document.querySelector('div[style*="position: fixed"][style*="z-index: 10000"]');
+        const overlay = document.querySelector('div[style*="position: fixed"][style*="z-index: 9999"][style*="background: rgba(0, 0, 0, 0.5)"]');
+        
+        if (editorContainer && editorContainer.parentElement) {
+            editorContainer.remove();
+        }
+        if (overlay && overlay.parentElement) {
+            overlay.remove();
+        }
+        
+        // 延迟一小段时间确保面板已关闭，然后打开标签编辑窗口
+        setTimeout(() => {
+            // 尝试找到橙果系统的标签编辑按钮并点击
+            const tagEditButtons = document.querySelectorAll('button.ant-btn.btn-common.ant-btn-primary');
+            let found = false;
+            
+            for (let btn of tagEditButtons) {
+                if (btn.textContent.includes('编辑') || btn.textContent.includes('标签')) {
+                    btn.click();
+                    found = true;
+                    console.log('找到并点击了标签编辑按钮');
+                    break;
+                }
+            }
+            
+            if (!found) {
+                // 如果找不到按钮，尝试直接调用橙果系统的标签编辑函数
+                if (typeof window.Ie === 'function') {
+                    window.Ie();
+                    console.log('调用了橙果系统的标签编辑函数 Ie()');
+                } else {
+                    console.warn('未找到标签编辑按钮或函数');
+                    showMessage('无法打开标签编辑窗口，请确保在橙果系统页面中', false);
+                }
+            }
+        }, 100);
     }
 
     // 更新图片链接
@@ -1631,13 +1680,13 @@
         const imageLinks = document.getElementById('image-links');
         if (!imageLinks) return;
 
-        const mainImages = []; // 主要图片：题干图片、答案图片、备注图片
-        const questionImages = []; // 来自题干的图片
+        const mainImages = []; // 主要图片：题目图片、答案图片、备注图片
+        const questionImages = []; // 来自题目的图片
         const answerImages = []; // 来自答案的图片
         
         // 提取主要图片字段
         if (content.originalUrl) {
-            mainImages.push({ url: content.originalUrl, label: '题干图片' });
+            mainImages.push({ url: content.originalUrl, label: '题目图片' });
         }
         if (content.rightUrl) {
             mainImages.push({ url: content.rightUrl, label: '答案图片' });
@@ -1646,12 +1695,12 @@
             mainImages.push({ url: content.remarkUrl, label: '备注图片' });
         }
 
-        // 从题干内容中提取图片URL
+        // 从题目内容中提取图片URL
         const questionContent = content.question || '';
         const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/gi;
         let match;
         
-        // 提取题干图片
+        // 提取题目图片
         while ((match = imgRegex.exec(questionContent)) !== null) {
             const src = match[1];
             if (src && !mainImages.some(img => img.url === src) && !questionImages.includes(src)) {
@@ -1671,7 +1720,7 @@
         // 构建HTML
         let imagesHtml = '';
 
-        // 1. 显示主要图片（题干图片、答案图片、备注图片）
+        // 1. 显示主要图片（题目图片、答案图片、备注图片）
         if (mainImages.length > 0) {
             imagesHtml += mainImages.map(img => `
                 <a href="javascript:void(0)" class="image-link" data-image-url="${img.url}" title="${img.url}">
@@ -1681,9 +1730,9 @@
             `).join('');
         }
 
-        // 2. 显示来自题干的图片
+        // 2. 显示来自题目的图片
         if (questionImages.length > 0) {
-            imagesHtml += '<div style="margin-top: 8px; font-size: 11px; color: #666; font-weight: 500;">题干内:</div>';
+            imagesHtml += '<div style="margin-top: 8px; font-size: 11px; color: #666; font-weight: 500;">题目内:</div>';
             if (questionImages.length > 4) {
                 // 多于4张则多行显示，每行2张
                 imagesHtml += '<div style="display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px;">';
@@ -1834,20 +1883,20 @@
                 let questionContent = result.content.question || '';
                 let answerContent = result.content.answer || '';
 
-                console.log('原始题干内容:', questionContent);
+                console.log('原始题目内容:', questionContent);
                 console.log('原始答案内容:', answerContent);
 
                 // 调试：检查是否包含换行符和图片
-                console.log('题干内容包含换行符:', questionContent.includes('\n'));
+                console.log('题目内容包含换行符:', questionContent.includes('\n'));
                 console.log('答案内容包含换行符:', answerContent.includes('\n'));
-                console.log('题干内容包含图片:', /<img[^>]*>/i.test(questionContent));
+                console.log('题目内容包含图片:', /<img[^>]*>/i.test(questionContent));
                 console.log('答案内容包含图片:', /<img[^>]*>/i.test(answerContent));
 
                 // 使用保护HTML标签并过滤换行符的函数
                 questionContent = protectHtmlTagsAndFilterNewlines(questionContent);
                 answerContent = protectHtmlTagsAndFilterNewlines(answerContent);
 
-                console.log('过滤后题干内容:', questionContent);
+                console.log('过滤后题目内容:', questionContent);
                 console.log('过滤后答案内容:', answerContent);
 
                 // 直接加载全部内容
@@ -1882,15 +1931,15 @@
         const answerText = document.getElementById('answer-editor').value;
         const answerSupplementText = document.getElementById('answer-supplement').value;
 
-        // 更新题干内容预览
+        // 更新题目内容预览
         if (questionText) {
             renderWithKaTeX(document.getElementById('question-preview'), questionText);
         } else {
             document.getElementById('question-preview').innerHTML =
-                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题干内容预览将在这里显示...</div>';
+                '<div style="color: #999; font-style: italic; text-align: center; padding: 20px;">题目内容预览将在这里显示...</div>';
         }
 
-        // 更新题干补充预览
+        // 更新题目补充预览
         if (questionSupplementText) {
             renderWithKaTeX(document.getElementById('question-supplement-preview'), questionSupplementText);
         } else {
