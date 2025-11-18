@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.52
+// @version      1.6.53
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题目和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -620,7 +620,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.52</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.53</span>
                     </div>
                     <button id="close-editor" class="image-viewer-close" title="关闭">×</button>
                 </div>
@@ -1092,8 +1092,8 @@
                             message = '已转换为橙果码格式';
                             break;
                         case 'markdown':
-                            // 转MarkDown - 这里可以添加具体的转换逻辑
-                            convertedContent = sourceContent;
+                            // 转MarkDown - 将橙果码HTML标签逆转换为普通文本
+                            convertedContent = convertToMarkdown(sourceContent);
                             message = '已转换为MarkDown格式';
                             break;
                         case 'html':
@@ -1408,51 +1408,91 @@
 
             return s;
         }
-
-        // 转换为橙果码格式的函数
-        function convertToOrangeCode(content) {
+    
+        // 转Markdown函数：只进行还原操作
+        function convertToMarkdown(content) {
             if (!content) return '';
             
             let result = content;
             
-            // 1. 处理LaTeX公式：将 $...$ 和 \(...\) 包装在 <span class="CgTex">$...$</span> 中
-            // 使用函数替换确保捕获组内容正确插入，并先进行LaTeX归一化
-            result = result.replace(/\$([^$]+?)\$/g, function(match, formulaContent) {
-                const normalizedContent = normalizeLatexForMathQuill(formulaContent);
-                return '<span class="CgTex">$' + normalizedContent + '$</span>';
-            });
+            // 第一步：先对所有内容进行统一的HTML实体还原
+            result = result.replace(/&lt;/g, '<')
+                          .replace(/&gt;/g, '>')
+                          .replace(/&amp;/g, '&')
+                          .replace(/&quot;/g, '"')
+                          .replace(/&#39;/g, "'")
+                          .replace(/&nbsp;/g, ' ');
             
-            result = result.replace(/\\\(([\s\S]+?)\\\)/g, function(match, formulaContent) {
-                const normalizedContent = normalizeLatexForMathQuill(formulaContent);
-                return '<span class="CgTex">$' + normalizedContent + '$</span>';
-            });
-            
-            // 2. 转义普通文本中的 < 为 <（但不转义公式内的）
-            // 使用一个临时标记来保护已经处理过的公式部分
-            const formulaRegex = /<span class="CgTex">[^<]*<\/span>/g;
+            // 第二步：处理LaTeX公式：将 <span class="CgTex">$...$</span> 还原为 $...$
+            const formulaRegex = /<span class="CgTex">\$(.*?)\$<\/span>/gs;
+            let match;
             const formulas = [];
             let index = 0;
             
             // 提取所有公式并替换为临时标记
-            result = result.replace(formulaRegex, (match) => {
-                formulas.push(match);
-                return `__FORMULA_${index++}__`;
-            });
+            while ((match = formulaRegex.exec(result)) !== null) {
+                const fullMatch = match[0];
+                const formulaContent = match[1];
+                
+                formulas.push('$' + formulaContent + '$');
+                result = result.replace(fullMatch, `__FORMULA_${index++}__`);
+                
+                // 重置正则表达式lastIndex以避免无限循环
+                formulaRegex.lastIndex = 0;
+            }
             
-            // 转义剩余文本中的 <
-            result = result.replace(/</g, '<');
+            // 第三步：将 <br> 标签转换为换行符
+            result = result.replace(/<br\s*\/?>/gi, '\n');
             
-            // 恢复公式部分
+            // 第四步：移除其他不必要的HTML标签，保留纯文本
+            result = result.replace(/<[^>]*>/g, '');
+            
+            // 第五步：恢复公式部分
             formulas.forEach((formula, i) => {
                 result = result.replace(`__FORMULA_${i}__`, formula);
             });
             
-            // 3. 将所有换行符转换为 <br> 标签
+            return result;
+        }
+        
+        // 转橙果码函数：不进行任何转义操作
+        function convertToOrangeCode(content) {
+            if (!content) return '';
+            
+            let result = content;
+            const formulas = [];
+            let index = 0;
+            
+            // 第一步：准确识别并提取所有公式
+            const latexRegex = /\$([^$]+?)\$/g;
+            let match;
+            
+            // 提取所有公式并用临时标记替换
+            while ((match = latexRegex.exec(result)) !== null) {
+                const fullMatch = match[0];
+                const formulaContent = match[1];
+                
+                formulas.push({
+                    original: fullMatch,
+                    content: formulaContent
+                });
+                
+                result = result.replace(fullMatch, `__FORMULA_${index++}__`);
+                latexRegex.lastIndex = 0;
+            }
+            
+            // 第二步：将所有换行符转换为 <br> 标签
             result = result.replace(/\n/g, '<br>');
+            
+            // 第三步：恢复公式部分，不进行任何HTML转义
+            formulas.forEach((formula, i) => {
+                // 不对公式内容进行HTML转义，保持原始符号
+                const formulaHTML = `<span class="CgTex">$${formula.content}$</span>`;
+                result = result.replace(`__FORMULA_${i}__`, formulaHTML);
+            });
             
             return result;
         }
-
         setupConvertButtons();
         
         // 添加源码编辑器编辑按钮事件监听
