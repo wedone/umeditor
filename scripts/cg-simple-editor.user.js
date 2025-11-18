@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.51
+// @version      1.6.52
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题目和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -620,7 +620,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.51</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.52</span>
                     </div>
                     <button id="close-editor" class="image-viewer-close" title="关闭">×</button>
                 </div>
@@ -1163,7 +1163,7 @@
                 let newContent = '';
                 
                 lis.forEach(li => {
-                    const indent = '  '.repeat(indentLevel);
+                    const indent = '&nbsp;&nbsp;'.repeat(indentLevel);
                     const content = li.innerHTML.trim();
                     newContent += `${indent}<strong>・</strong> ${content}\n`;
                 });
@@ -1221,7 +1221,7 @@
                     updateListStack(listStack, indentLevel);
                     
                     // 生成自定义格式
-                    const customIndent = '  '.repeat(indentLevel);
+                    const customIndent = '&nbsp;&nbsp;'.repeat(indentLevel);
                     result.push(`${customIndent}<strong>・</strong> ${content}`);
                 } else {
                     // 非列表项
@@ -1322,6 +1322,93 @@
         // 保留原convertUnorderedLists函数作为兼容性别名
         const convertUnorderedLists = processHtmlLists;
 
+        // 对 LaTeX 代码进行归一化处理（适配 MathQuill 渲染）
+        //
+        // 处理项：
+        // - 单字母 \mathbb{X} -> \X
+        // - 竖线 | -> \mid
+        // - 压缩多余空白
+        // - 处理 mhchem 的 \ce{...}
+        // - \xlongequal{...} -> =
+        //
+        // @param {string} latex 原始 LaTeX 代码
+        // @returns {string} 归一化后的 LaTeX
+        function normalizeLatexForMathQuill(latex){
+            if(!latex) return latex;
+            var s = String(latex);
+
+            // 花括号处理（将自适应定界符还原为普通花括号）
+            s = s.replace(/\\left\\\{/g, '\\{').replace(/\\right\\\}/g, '\\}');
+            // 花括号处理（避免在某些环境下使用 \left/\right 导致空白渲染）
+            s = s.replace(/\\\{/g, '\\left\\{').replace(/\\\}/g, '\\right\\}');
+
+            // // 单字母 \mathbb{X} -> \X（兼容 AI 输出）
+            // s = s.replace(/\\mathbb\{\s*([A-Za-z])\s*\}/g, function(_, ch){
+            //     return '\\' + ch;
+            // });
+
+            // \complement 映射（补集符号）
+            s = s.replace(/\\complement(?=[_\s{]|$)/g, '{∁}');
+
+            // 将常见的 \not\... / 标准 LaTeX 名称直接替换为单个 Unicode 符号，
+            // 以避免在后续 MathQuill 解析中被拆分为 "\\not" + "其他符号"
+            // 顺序从长到短匹配以防止部分匹配（例如先匹配 subsetneqq 再匹配 subseteq/subset）
+            // 对应关系：仅使用标准 LaTeX 名称替换为 Unicode（不保留 \not\... 形式）
+            // 按表格整理的 LaTeX -> Unicode 替换（从长到短顺序，以避免部分匹配）
+            // 1) 真子集 / 真超集（严格，不等于）
+            // \varsubsetneqq, \varsubsetneq, \subsetneqq, \subsetneq -> ⊊ (U+228A)
+            s = s.replace(/\\varsubsetneqq(?=[_\s{]|$)/g, '\u228A');
+            s = s.replace(/\\varsubsetneq(?=[_\s{]|$)/g, '\u228A');
+            s = s.replace(/\\subsetneqq(?=[_\s{]|$)/g, '⫋');
+            s = s.replace(/\\subsetneq(?=[_\s{]|$)/g, '⊊');
+            // \varsupsetneqq, \varsupsetneq, \supsetneqq, \supsetneq -> ⊋ (U+228B)
+            s = s.replace(/\\varsupsetneqq(?=[_\s{]|$)/g, '\u228B');
+            s = s.replace(/\\varsupsetneq(?=[_\s{]|$)/g, '\u228B');
+            s = s.replace(/\\supsetneqq(?=[_\s{]|$)/g, '⫌');
+            s = s.replace(/\\supsetneq(?=[_\s{]|$)/g, '⊋');
+
+            // 2) 普通子集 / 超集
+            // \sqsubseteq -> ⊑ (U+2291)
+            s = s.replace(/\\sqsubseteq(?=[_\s{]|$)/g, '\u2291');
+            // \sqsupseteq -> ⊒ (U+2292)
+            s = s.replace(/\\sqsupseteq(?=[_\s{]|$)/g, '\u2292');
+            // \subseteq -> ⊆ (U+2286)
+            s = s.replace(/\\subseteq(?=[_\s{]|$)/g, '\u2286');
+            // \supseteq -> ⊇ (U+2287)
+            s = s.replace(/\\supseteq(?=[_\s{]|$)/g, '\u2287');
+            // \subset -> ⊂ (U+2282)
+            s = s.replace(/\\subset(?=[_\s{]|$)/g, '\u2282');
+            // \supset -> ⊃ (U+2283)
+            s = s.replace(/\\supset(?=[_\s{]|$)/g, '\u2283');
+
+            // 3) 非关系 / 否定（标准命令）
+            // \nsubseteq -> ⊈ (U+2288)
+            s = s.replace(/\\nsubseteq(?=[_\s{]|$)/g, '\u2288');
+            // \nsupseteq -> ⊉ (U+2289)
+            s = s.replace(/\\nsupseteq(?=[_\s{]|$)/g, '\u2289');
+            // \nsubset -> ⊄ (U+2284)
+            s = s.replace(/\\nsubset(?=[_\s{]|$)/g, '\u2284');
+            // \nsupset -> ⊅ (U+2285)
+            s = s.replace(/\\nsupset(?=[_\s{]|$)/g, '\u2285');
+            // \notin -> ∉ (U+2209)
+            s = s.replace(/\\notin(?=[_\s{]|$)/g, '\u2209');
+            // \not\ni (用户可能输入) -> ∌ (U+220C) 但按你要求不保留 \not\... 形式；这里保留 \nni 形式映射
+            s = s.replace(/\\nni(?=[_\s{]|$)/g, '\u220C');
+
+            // 其他日常使用中错误渲染替换
+                
+            // // 将 \sup 转为 \text{sup } 以便 MathQuill 正确显示
+            // s = s.replace(/\\sup/g, '\\text{sup }');
+            // // 将 \triangle 转为 \bigtriangleup 以便 MathQuill 正确显示三角形符号
+            // s = s.replace(/\\triangle(?=[_\s{]|$)/g, '\\bigtriangleup');
+            // 竖线替换
+            //s = s.replace(/\|/g, '\\mid');
+            // 压缩连续空白
+            s = s.replace(/\s{2,}/g, ' ');
+
+            return s;
+        }
+
         // 转换为橙果码格式的函数
         function convertToOrangeCode(content) {
             if (!content) return '';
@@ -1329,13 +1416,15 @@
             let result = content;
             
             // 1. 处理LaTeX公式：将 $...$ 和 \(...\) 包装在 <span class="CgTex">$...$</span> 中
-            // 使用函数替换确保捕获组内容正确插入
+            // 使用函数替换确保捕获组内容正确插入，并先进行LaTeX归一化
             result = result.replace(/\$([^$]+?)\$/g, function(match, formulaContent) {
-                return '<span class="CgTex">$' + formulaContent + '$</span>';
+                const normalizedContent = normalizeLatexForMathQuill(formulaContent);
+                return '<span class="CgTex">$' + normalizedContent + '$</span>';
             });
             
             result = result.replace(/\\\(([\s\S]+?)\\\)/g, function(match, formulaContent) {
-                return '<span class="CgTex">$' + formulaContent + '$</span>';
+                const normalizedContent = normalizeLatexForMathQuill(formulaContent);
+                return '<span class="CgTex">$' + normalizedContent + '$</span>';
             });
             
             // 2. 转义普通文本中的 < 为 <（但不转义公式内的）
