@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         橙果错题编辑器
 // @namespace    http://tampermonkey.net/
-// @version      1.6.53
+// @version      1.6.54
 // @description  橙果错题编辑工具，支持读取、编辑和保存错题，支持LaTeX公式预览，切换显示题目和答案，支持双栏编辑（增强版Markdown解析）
 // @author       WeDone
 // @match        https://ctb.91chengguo.com/*
@@ -620,7 +620,7 @@
                             <i data-lucide="file-pen-line" style="width: 20px; height: 20px;"></i>
                             橙果错题编辑器
                         </h3>
-                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.53</span>
+                        <span style="margin-left: 8px; font-size: 12px; color: #999;">v1.6.54</span>
                     </div>
                     <button id="close-editor" class="image-viewer-close" title="关闭">×</button>
                 </div>
@@ -1285,7 +1285,7 @@
             
             // 处理斜体：*斜体* 或 _斜体_
             result = result.replace(/\*(.*?)\*/g, '<em>$1</em>');
-            result = result.replace(/_(.*?)_/g, '<em>$1</em>');
+            // result = result.replace(/_(.*?)_/g, '<em>$1</em>');
             
             // 处理删除线：~~删除线~~
             result = result.replace(/~~(.*?)~~/g, '<del>$1</del>');
@@ -1455,7 +1455,7 @@
             return result;
         }
         
-        // 转橙果码函数：不进行任何转义操作
+        // 转橙果码函数：不进行任何转义操作，支持多种LaTeX公式界定符和归一化
         function convertToOrangeCode(content) {
             if (!content) return '';
             
@@ -1464,11 +1464,14 @@
             let index = 0;
             
             // 第一步：准确识别并提取所有公式
-            const latexRegex = /\$([^$]+?)\$/g;
+            // 支持两种LaTeX公式界定符：\(...\) 和 $...$
+            const latexRegex1 = /\\\(([\s\S]*?)\\\)/g;  // 匹配 \(...\)
+            const latexRegex2 = /\$([^$]+?)\$/g;        // 匹配 $...$
+            
             let match;
             
-            // 提取所有公式并用临时标记替换
-            while ((match = latexRegex.exec(result)) !== null) {
+            // 先提取 \(...\) 公式
+            while ((match = latexRegex1.exec(result)) !== null) {
                 const fullMatch = match[0];
                 const formulaContent = match[1];
                 
@@ -1478,16 +1481,33 @@
                 });
                 
                 result = result.replace(fullMatch, `__FORMULA_${index++}__`);
-                latexRegex.lastIndex = 0;
+                latexRegex1.lastIndex = 0;
+            }
+            
+            // 再提取 $...$ 公式
+            while ((match = latexRegex2.exec(result)) !== null) {
+                const fullMatch = match[0];
+                const formulaContent = match[1];
+                
+                formulas.push({
+                    original: fullMatch,
+                    content: formulaContent
+                });
+                
+                result = result.replace(fullMatch, `__FORMULA_${index++}__`);
+                latexRegex2.lastIndex = 0;
             }
             
             // 第二步：将所有换行符转换为 <br> 标签
             result = result.replace(/\n/g, '<br>');
             
-            // 第三步：恢复公式部分，不进行任何HTML转义
+            // 第三步：恢复公式部分，不进行任何HTML转义，但进行LaTeX归一化
             formulas.forEach((formula, i) => {
+                // 对公式内容进行LaTeX归一化处理
+                const normalizedContent = normalizeLatexForMathQuill(formula.content);
+                
                 // 不对公式内容进行HTML转义，保持原始符号
-                const formulaHTML = `<span class="CgTex">$${formula.content}$</span>`;
+                const formulaHTML = `<span class="CgTex">$${normalizedContent}$</span>`;
                 result = result.replace(`__FORMULA_${i}__`, formulaHTML);
             });
             
